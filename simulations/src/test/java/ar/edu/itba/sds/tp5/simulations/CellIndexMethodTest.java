@@ -1,18 +1,18 @@
 package ar.edu.itba.sds.tp5.simulations;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class Grid implements Iterable<Particle> {
-    private final double L;
-    private final List<Particle> particles;
+import org.junit.jupiter.api.Test;
 
+public class CellIndexMethodTest {
     private static final int[][] NEIGHBOR_OFFSETS = {
         {0, 1},
         {1, -1},
@@ -20,27 +20,22 @@ public class Grid implements Iterable<Particle> {
         {1, 1}
     };
 
-    public Grid(int N, double L) {
-        this.L = L;
-        this.particles = new ArrayList<>(N);
-        for (int i = 0; i < N; i++) {
-            particles.add(new Particle(L));
-        }
-        particles.add(new Particle(true, L));
+    @Test
+    public void cellIndexMatchesBruteForce() {
+        final int N = 200;
+        final double L = 6.0;
+        final double rc = 0.5;
+
+        final Grid grid = new Grid(N, L);
+
+        final Map<Integer, List<Particle>> cellIndexContacts = grid.cellIndexMethod(rc);
+        final Map<Integer, List<Particle>> bruteForceContacts = bruteForceContacts(grid, rc);
+
+        assertEquals(bruteForceContacts, cellIndexContacts);
     }
 
-    public double getL() {
-        return L;
-    }
-
-    public List<Particle> getParticles() {
-        return particles;
-    }
-
-    public Map<Integer, List<Particle>> cellIndexMethod(double rc) {
-        if (rc <= 0) {
-            throw new IllegalArgumentException("rc must be positive");
-        }
+    private Map<Integer, List<Particle>> bruteForceContacts(Grid grid, double rc) {
+        final List<Particle> particles = grid.getParticles();
         if (particles.isEmpty()) {
             return Map.of();
         }
@@ -51,22 +46,25 @@ public class Grid implements Iterable<Particle> {
             .orElse(0.0);
 
         final double minCellSide = rc + 2 * maxRadius;
-        int cellsPerSide = minCellSide <= 0 ? 1 : (int) Math.floor(L / minCellSide);
+        int cellsPerSide = minCellSide <= 0 ? 1 : (int) Math.floor(grid.getL() / minCellSide);
         if (cellsPerSide < 1) {
             cellsPerSide = 1;
         }
-        final double cellSide = L / cellsPerSide;
+        final double cellSide = grid.getL() / cellsPerSide;
 
-        final Map<Integer, List<Particle>> occupancy = buildOccupancy(cellsPerSide, cellSide);
+        final Map<Integer, List<Particle>> occupancy = new HashMap<>();
+        for (Particle particle : particles) {
+            final int cellIndex = toCellIndex(particle, cellsPerSide, cellSide);
+            occupancy.computeIfAbsent(cellIndex, k -> new ArrayList<>()).add(particle);
+        }
+
         final Map<Integer, Set<Particle>> contactSets = new HashMap<>();
-
         for (Map.Entry<Integer, List<Particle>> entry : occupancy.entrySet()) {
             final int cellIndex = entry.getKey();
             final List<Particle> cellParticles = entry.getValue();
             final int row = cellIndex / cellsPerSide;
             final int column = cellIndex % cellsPerSide;
 
-            // Evaluate contacts within the same cell
             for (int i = 0; i < cellParticles.size(); i++) {
                 final Particle pi = cellParticles.get(i);
                 for (int j = i + 1; j < cellParticles.size(); j++) {
@@ -78,7 +76,6 @@ public class Grid implements Iterable<Particle> {
                 }
             }
 
-            // Evaluate contacts with the relevant neighbor cells
             for (int[] offset : NEIGHBOR_OFFSETS) {
                 final int neighborRow = row + offset[0];
                 final int neighborColumn = column + offset[1];
@@ -113,27 +110,13 @@ public class Grid implements Iterable<Particle> {
         return contactsByCell;
     }
 
-    @Override
-    public Iterator<Particle> iterator() {
-        return particles.iterator();
-    }
-
-    private Map<Integer, List<Particle>> buildOccupancy(int cellsPerSide, double cellSide) {
-        final Map<Integer, List<Particle>> occupancy = new HashMap<>();
-        for (Particle particle : particles) {
-            final int cellIndex = toCellIndex(particle, cellsPerSide, cellSide);
-            occupancy.computeIfAbsent(cellIndex, k -> new ArrayList<>()).add(particle);
-        }
-        return occupancy;
-    }
-
     private int toCellIndex(Particle particle, int cellsPerSide, double cellSide) {
-        final int column = clampToGrid((int) (particle.getX() / cellSide), cellsPerSide);
-        final int row = clampToGrid((int) (particle.getY() / cellSide), cellsPerSide);
+        final int column = clamp((int) (particle.getX() / cellSide), cellsPerSide);
+        final int row = clamp((int) (particle.getY() / cellSide), cellsPerSide);
         return row * cellsPerSide + column;
     }
 
-    private int clampToGrid(int coordinate, int cellsPerSide) {
+    private int clamp(int coordinate, int cellsPerSide) {
         if (coordinate < 0) {
             return 0;
         }
