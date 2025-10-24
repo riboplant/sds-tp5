@@ -12,6 +12,7 @@ import java.util.Set;
 public class Grid implements Iterable<Particle> {
     private final double L;
     private final List<Particle> particles;
+    private final double dt;
 
     private static final int[][] NEIGHBOR_OFFSETS = {
         {0, 1},
@@ -20,9 +21,10 @@ public class Grid implements Iterable<Particle> {
         {1, 1}
     };
 
-    public Grid(int N, double L) {
+    public Grid(int N, double L, double dt) {
         this.L = L;
         this.particles = new ArrayList<>(N);
+        this.dt = dt;
         for (int i = 0; i < N; i++) {
             particles.add(new Particle(L));
         }
@@ -35,6 +37,15 @@ public class Grid implements Iterable<Particle> {
 
     public List<Particle> getParticles() {
         return particles;
+    }
+
+    public double getDt() {
+        return dt;
+    }
+
+    @Override
+    public Iterator<Particle> iterator() {
+        return particles.iterator();
     }
 
     public Map<Integer, List<Particle>> cellIndexMethod(double rc) {
@@ -111,11 +122,6 @@ public class Grid implements Iterable<Particle> {
             contactsByCell.put(entry.getKey(), cellContacts);
         }
         return contactsByCell;
-    }
-
-    @Override
-    public Iterator<Particle> iterator() {
-        return particles.iterator();
     }
 
     private Map<Integer, List<Particle>> buildOccupancy(int cellsPerSide, double cellSide) {
