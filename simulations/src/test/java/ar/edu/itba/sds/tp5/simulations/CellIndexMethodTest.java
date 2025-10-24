@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import ar.edu.itba.sds.tp5.simulations.models.Particle;
 import org.junit.jupiter.api.Test;
 
 public class CellIndexMethodTest {

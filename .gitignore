@@ -385,4 +385,7 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# MacOS
+.DS_Store
+
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains,java,python,windows,linux,macos
