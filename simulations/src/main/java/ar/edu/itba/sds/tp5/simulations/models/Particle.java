@@ -5,14 +5,16 @@ import java.util.Random;
 public class Particle {
     private static final Random RANDOM = new Random();
     private static final double TAU = 0.5;
+    private static final double BETA = 0.9;
     private static int idCounter = 0;
 
     private final double rMin;
-    private final double rMax;
-    private final double prevR;
+    private final double rMax;;
+    private final double vDesiredMax;
     private final boolean isFixed;
     private final int id;
     private double r;
+    private double prevR;
     private MathVector velocity;
     private MathVector position;
     private MathVector prevPosition;
@@ -26,6 +28,7 @@ public class Particle {
         this.prevR = r;
         final double angle = RANDOM.nextDouble() * 2 * Math.PI;
         this.velocity = MathVector.ofPolar(v, angle);
+        this.vDesiredMax = v;
         this.position = new MathVector(RANDOM.nextDouble() * L, RANDOM.nextDouble() * L);
         this.prevPosition = this.position;
         this.target = new MathVector(RANDOM.nextDouble() * L, RANDOM.nextDouble() * L);
@@ -36,18 +39,43 @@ public class Particle {
         this.isFixed = isFixed;
         this.rMin = rDefault;
         this.rMax = rDefault;
+        this.vDesiredMax = 0.0;
         this.id = idCounter++;
         this.prevR = rDefault;
         this.position = new MathVector(L / 2.0, L / 2.0);
         this.r = rDefault;
     }
 
-    public void updatePosition(boolean isCollision, double dt, double prevR) {
+    public void updateRadius(boolean isCollision, double dt) {
         if(isCollision) {
             this.r = this.rMin;
         } else {
             double newR = this.prevR + this.rMax*(dt/TAU);
+            this.prevR = this.r;
+            this.r = Math.min(newR, this.rMax);
         }
+    }
+
+    public void updateVelocity(boolean isFrontalContact, MathVector e) {
+        if(isFrontalContact) {
+            this.velocity = e.scale(this.vDesiredMax);
+        } else {
+            double speed = speedFromRadius();
+            this.velocity = e.scale(speed);
+        }
+    }
+
+    private double speedFromRadius() {
+        double num = Math.max(0.0, this.r - this.rMin);
+        double den = Math.max(1e-12, this.rMax - this.rMin);
+        double x = num / den;
+        double s = vDesiredMax * Math.pow(x, BETA);
+        if (Double.isNaN(s) || s < 0) return 0.0;
+        return Math.min(s, vDesiredMax);
+    }
+
+    public void updatePosition(double dt) {
+        this.position = this.position.add(this.velocity.scale(dt));
     }
 
     public double getRMin() {
@@ -62,21 +90,9 @@ public class Particle {
         return r;
     }
 
-    public double getVx() {
-        return velocity.x();
-    }
+    public MathVector getVelocity() { return velocity; }
 
-    public double getVy() {
-        return velocity.y();
-    }
-
-    public double getX() {
-        return position.x();
-    }
-
-    public double getY() {
-        return position.y();
-    }
+    public MathVector getPosition() { return position; }
 
     public int getId() {
         return id;

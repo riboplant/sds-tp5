@@ -172,4 +172,8 @@ public record MathVector(double x, double y) {
     public MathVector perpendicular() {
         return new MathVector(-y, x);
     }
+
+    public MathVector prep() {
+        return new MathVector(-y, x);
+    }
 }
