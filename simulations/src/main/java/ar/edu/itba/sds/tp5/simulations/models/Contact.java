@@ -13,17 +13,25 @@ public final class Contact {
         return new MathVector(dx, dy);
     }
 
+    public static MathVector directDelta(MathVector from, MathVector to) {
+        return new MathVector(to.x() - from.x(), to.y() - from.y());
+    }
+
     // @TODO chequear
     public static boolean isAhead(Particle i, Particle j, double L) {
-        MathVector rij = minImage(i.getPosition(), j.getPosition(), L);                 // i -> j
-        MathVector vi = i.getVelocity();                  // velocidad actual de i
-        if (vi.length() < 1e-8) return false;
-        MathVector e = vi.normalize();
+        MathVector rij = directDelta(i.getPosition(), j.getPosition());
+        MathVector vi = i.getVelocity();
+        MathVector e;
+        if (vi.length() < 1e-8) {
+            e = i.directionToTarget().normalize();
+        } else {
+            e = vi.normalize();
+        }
         return e.dot(rij) >= 0.0;
     }
 
     public static boolean overlap(Particle i, Particle j, double L) {
-        MathVector rij = minImage(i.getPosition(), j.getPosition(), L);
+        MathVector rij = directDelta(i.getPosition(), j.getPosition());
         double dij = rij.length();
         return dij < (i.getR() + j.getR());
     }
@@ -38,10 +46,16 @@ public final class Contact {
     //@TODO: revisar
     public static boolean frontBandIntersects(Particle i, Particle j, double L) {
         MathVector vi = i.getVelocity();
-        double nv = vi.length();
-        if (nv < 1e-8) return false;
-
-        MathVector e = new MathVector(vi.x() / nv, vi.y() / nv);
+        MathVector e;
+        if (vi.length() < 1e-8) {
+            MathVector toT = i.directionToTarget();
+            double nt = toT.length();
+            if (nt < 1e-8) return false;
+            e = toT.scale(1.0/nt);
+        } else {
+            double nv = vi.length();
+            e = vi.scale(1.0/nv);
+        }
 
         MathVector ri = i.getPosition();
         MathVector rj = j.getPosition();
@@ -50,8 +64,8 @@ public final class Contact {
 
         MathVector Pplus  = ri.add(nPerp.scale(i.getRMin()));
         MathVector Pminus = ri.add(nPerp.scale(-i.getRMin()));
-        MathVector rjPlus  = Pplus.add(minImage(Pplus, rj, L));
-        MathVector rjMinus = Pminus.add(minImage(Pminus, rj, L));
+        MathVector rjPlus  = Pplus.add(directDelta(Pplus, rj));
+        MathVector rjMinus = Pminus.add(directDelta(Pminus, rj));
 
         double dPlus  = pointLineDistance(Pplus,  e, rjPlus);
         double dMinus = pointLineDistance(Pminus, e, rjMinus);
@@ -69,15 +83,18 @@ public final class Contact {
     }
 
     public static MathVector escapeDir(Particle i, Particle j, double L) {
-        MathVector dji = minImage(j.getPosition(), i.getPosition(), L);
-        double n = dji.lengthSquared();
-        if (n < EPS) return new MathVector(1, 0);
-        return new MathVector(dji.x() / n, dji.y() / n);
+        MathVector dji = directDelta(j.getPosition(), i.getPosition());
+        double n = dji.length();
+        if (n < EPS) {
+            double a = 2*Math.PI*Math.random();
+            return new MathVector(Math.cos(a), Math.sin(a));
+        }
+        return dji.scale(1.0 / n);
     }
 
     public static boolean contactWithCircle(Particle i, MathVector r0, double R0, double L) {
         MathVector ri = i.getPosition();
-        MathVector dri = minImage(ri, r0, L);
+        MathVector dri = directDelta(ri, r0);
         return dri.length() <= (R0 + i.getRMin());
     }
 }

@@ -388,4 +388,9 @@ $RECYCLE.BIN/
 # MacOS
 .DS_Store
 
+# Jetbrains
+.idea/
+
+data
+
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains,java,python,windows,linux,macos

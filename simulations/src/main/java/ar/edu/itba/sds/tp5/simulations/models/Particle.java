@@ -46,13 +46,29 @@ public class Particle {
         this.r = rDefault;
     }
 
+    //@TODO: borrar, es de prueba
+    public Particle(double x, double y, double tx, double ty, double rMin, double rMax, double v) {
+        this.rMin = rMin;
+        this.rMax = rMax;
+        this.id = idCounter++;
+        this.r = rMin + (rMax - rMin) * RANDOM.nextDouble();
+        this.prevR = r;
+        final double angle = RANDOM.nextDouble() * 2 * Math.PI;
+        this.velocity = MathVector.ofPolar(v, angle);
+        this.vDesiredMax = v;
+        this.position = new MathVector(x, y);
+        this.prevPosition = this.position;
+        this.target = new MathVector(tx, ty);
+        isFixed = false;
+    }
+
     public void updateRadius(boolean isCollision, double dt) {
-        if(isCollision) {
+        if (isCollision) {
             this.r = this.rMin;
+            this.prevR = this.rMin;
         } else {
-            double newR = this.prevR + this.rMax*(dt/TAU);
+            this.r = Math.min(this.r + this.rMax*(dt/TAU), this.rMax);
             this.prevR = this.r;
-            this.r = Math.min(newR, this.rMax);
         }
     }
 
@@ -76,6 +92,11 @@ public class Particle {
 
     public void updatePosition(double dt) {
         this.position = this.position.add(this.velocity.scale(dt));
+    }
+
+    public MathVector directionToTarget() {
+        if (target == null) return MathVector.ZERO;
+        return target.subtract(position);
     }
 
     public double getRMin() {
