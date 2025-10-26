@@ -176,4 +176,35 @@ public record MathVector(double x, double y) {
     public MathVector prep() {
         return new MathVector(-y, x);
     }
+
+    public static MathVector minImage(MathVector from, MathVector to, double L) {
+        Objects.requireNonNull(from, "from vector");
+        Objects.requireNonNull(to, "to vector");
+        if (L <= 0.0) {
+            throw new IllegalArgumentException("Domain size L must be positive");
+        }
+        double dx = to.x() - from.x();
+        double dy = to.y() - from.y();
+        dx -= L * Math.round(dx / L);
+        dy -= L * Math.round(dy / L);
+        return new MathVector(dx, dy);
+    }
+
+    public static double wrapCoordinate(double value, double L) {
+        if (L <= 0.0) {
+            throw new IllegalArgumentException("Domain size L must be positive");
+        }
+        double wrapped = value % L;
+        if (wrapped < 0.0) {
+            wrapped += L;
+        }
+        return wrapped;
+    }
+
+    public MathVector wrapToBox(double L) {
+        return new MathVector(
+            wrapCoordinate(this.x, L),
+            wrapCoordinate(this.y, L)
+        );
+    }
 }

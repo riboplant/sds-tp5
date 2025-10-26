@@ -13,13 +13,13 @@ public final class Contact {
 //        return new MathVector(dx, dy);
 //    }
 
-    public static MathVector directDelta(MathVector from, MathVector to) {
-        return new MathVector(to.x() - from.x(), to.y() - from.y());
+    public static MathVector directDelta(MathVector from, MathVector to, double L) {
+        return MathVector.minImage(from, to, L);
     }
 
     // @TODO chequear
     public static boolean isAhead(Particle i, Particle j, double L) {
-        MathVector rij = directDelta(i.getPosition(), j.getPosition());
+        MathVector rij = directDelta(i.getPosition(), j.getPosition(), L);
         MathVector vi = i.getVelocity();
         MathVector e;
         if (vi.length() < 1e-8) {
@@ -31,7 +31,7 @@ public final class Contact {
     }
 
     public static boolean overlap(Particle i, Particle j, double L) {
-        MathVector rij = directDelta(i.getPosition(), j.getPosition());
+        MathVector rij = directDelta(i.getPosition(), j.getPosition(), L);
         double dij = rij.length();
         return dij < (i.getR() + j.getR());
     }
@@ -64,8 +64,8 @@ public final class Contact {
 
         MathVector Pplus  = ri.add(nPerp.scale(i.getRMin()));
         MathVector Pminus = ri.add(nPerp.scale(-i.getRMin()));
-        MathVector rjPlus  = Pplus.add(directDelta(Pplus, rj));
-        MathVector rjMinus = Pminus.add(directDelta(Pminus, rj));
+        MathVector rjPlus  = Pplus.add(directDelta(Pplus, rj, L));
+        MathVector rjMinus = Pminus.add(directDelta(Pminus, rj, L));
 
         double dPlus  = pointLineDistance(Pplus,  e, rjPlus);
         double dMinus = pointLineDistance(Pminus, e, rjMinus);
@@ -83,7 +83,7 @@ public final class Contact {
     }
 
     public static MathVector escapeDir(Particle i, Particle j, double L) {
-        MathVector eij = i.getPosition().subtract(j.getPosition());
+        MathVector eij = MathVector.minImage(j.getPosition(), i.getPosition(), L);
         double n = eij.length();
         if (n >= EPS) {
             return eij.scale(1.0 / n);

@@ -1,5 +1,7 @@
 package ar.edu.itba.sds.tp5.simulations.models;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class Particle {
@@ -17,6 +19,11 @@ public class Particle {
     private final double vDesiredMax;
     private final boolean isFixed;
     private final int id;
+    private final double L;
+    private static final List<MathVector> FIXED_CENTERS = new ArrayList<>();
+    private static final List<Double> FIXED_RADII = new ArrayList<>();
+    private static final double FIXED_TARGET_BUFFER = 0.05;
+    private static final int MAX_TARGET_SAMPLING_ATTEMPTS = 1_000;
     private double r;
     private double prevR;
     private MathVector velocity;
@@ -31,6 +38,7 @@ public class Particle {
         this.id = idCounter++;
         this.r = rMin + (rMax - rMin) * RANDOM.nextDouble();
         this.prevR = r;
+        this.L = L;
         final double angle = RANDOM.nextDouble() * 2 * Math.PI;
         this.velocity = MathVector.ofPolar(v, angle);
         this.vDesiredMax = v;
@@ -50,10 +58,12 @@ public class Particle {
         this.prevR = rDefault;
         this.position = new MathVector(L / 2.0, L / 2.0);
         this.r = rDefault;
+        this.L = L;
+        registerFixedObstacle(this.position, this.r);
     }
 
     //@TODO: borrar, es de prueba
-    public Particle(double x, double y, double tx, double ty, double rMin, double rMax, double v) {
+    public Particle(double x, double y, double tx, double ty, double rMin, double rMax, double v, double L) {
         this.rMin = rMin;
         this.rMax = rMax;
         this.id = idCounter++;
@@ -63,6 +73,7 @@ public class Particle {
         this.position = new MathVector(x, y);
         this.prevPosition = this.position;
         this.target = new MathVector(tx, ty);
+        this.L = L;
         this.velocity = initVelocity();
         isFixed = false;
     }
@@ -117,26 +128,30 @@ public class Particle {
 
     public void updatePosition(double dt, double L) {
         if(isFixed) return;
-        this.position = this.position.add(this.velocity.scale(dt));
+        this.position = wrapPosition(this.position.add(this.velocity.scale(dt)));
 
         // Update target if it has been reached
-        double d = this.position.subtract(this.target).length();
+        double d = MathVector.minImage(this.position, this.target, this.L).length();
         if (!arrived && d <= EPS_IN) {
             MathVector nt = null;
             int tries = 0;
             do {
-                nt = randomTargetInBox(L);
+                nt = randomTargetInBox(this.L);
                 tries++;
-            } while (this.position.subtract(nt).length() < TARGET_PADDING && tries < 10);
+            } while ((MathVector.minImage(this.position, nt, this.L).length() < TARGET_PADDING) && tries < 10);
 
-            if (this.position.subtract(nt).length() < TARGET_PADDING) {
-                final double x = (this.position.x() < L*0.5)
-                        ? (L*0.5 + RANDOM.nextDouble()*(L*0.5))
-                        : (RANDOM.nextDouble()*(L*0.5));
-                final double y = (this.position.y() < L*0.5)
-                        ? (L*0.5 + RANDOM.nextDouble()*(L*0.5))
-                        : (RANDOM.nextDouble()*(L*0.5));
+            if (MathVector.minImage(this.position, nt, this.L).length() < TARGET_PADDING) {
+                final double halfL = this.L * 0.5;
+                final double x = (this.position.x() < halfL)
+                        ? (halfL + RANDOM.nextDouble() * halfL)
+                        : (RANDOM.nextDouble() * halfL);
+                final double y = (this.position.y() < halfL)
+                        ? (halfL + RANDOM.nextDouble() * halfL)
+                        : (RANDOM.nextDouble() * halfL);
                 nt = new MathVector(x, y);
+                if (isInsideFixedObstacle(nt)) {
+                    nt = pushOutsideFixedObstacle(nt);
+                }
             }
 
             this.target = nt;
@@ -147,13 +162,13 @@ public class Particle {
         }
     }
 
-    private MathVector randomTargetInBox(final double L) {
-        return new MathVector(RANDOM.nextDouble() * L, RANDOM.nextDouble() * L);
-    }
-
     public MathVector directionToTarget() {
         if (target == null) return MathVector.ZERO;
-        return target.subtract(position);
+        MathVector delta = MathVector.minImage(position, target, this.L);
+        if (delta.length() < EPS) {
+            return MathVector.ZERO;
+        }
+        return delta;
     }
 
     public double getRMin() {
@@ -178,5 +193,74 @@ public class Particle {
 
     public boolean isFixed() {
         return isFixed;
+    }
+
+    private MathVector wrapPosition(MathVector pos) {
+        return pos.wrapToBox(this.L);
+    }
+
+    private static void registerFixedObstacle(MathVector center, double radius) {
+        FIXED_CENTERS.add(center);
+        FIXED_RADII.add(radius);
+    }
+
+    public static void resetStatics() {
+        idCounter = 0;
+        FIXED_CENTERS.clear();
+        FIXED_RADII.clear();
+    }
+
+    private MathVector randomTargetInBox(final double L) {
+        MathVector candidate = null;
+        for (int attempt = 0; attempt < MAX_TARGET_SAMPLING_ATTEMPTS; attempt++) {
+            candidate = uniformPointInBox(L);
+            if (!isInsideFixedObstacle(candidate)) {
+                return candidate;
+            }
+        }
+        return (candidate != null && !isInsideFixedObstacle(candidate))
+                ? candidate
+                : pushOutsideFixedObstacle(uniformPointInBox(L));
+    }
+
+    private MathVector uniformPointInBox(final double L) {
+        return new MathVector(RANDOM.nextDouble() * L, RANDOM.nextDouble() * L);
+    }
+
+    private boolean isInsideFixedObstacle(MathVector point) {
+        if (FIXED_CENTERS.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < FIXED_CENTERS.size(); i++) {
+            MathVector center = FIXED_CENTERS.get(i);
+            double radius = FIXED_RADII.get(i) + FIXED_TARGET_BUFFER;
+            double distance = MathVector.minImage(point, center, this.L).length();
+            if (distance < radius) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private MathVector pushOutsideFixedObstacle(MathVector point) {
+        MathVector adjusted = point;
+        for (int i = 0; i < FIXED_CENTERS.size(); i++) {
+            MathVector center = FIXED_CENTERS.get(i);
+            double radius = FIXED_RADII.get(i) + FIXED_TARGET_BUFFER;
+            MathVector delta = MathVector.minImage(center, adjusted, this.L);
+            double distance = delta.length();
+            if (distance < radius) {
+                MathVector direction;
+                if (distance < EPS) {
+                    double angle = RANDOM.nextDouble() * 2.0 * Math.PI;
+                    direction = MathVector.ofPolar(1.0, angle);
+                } else {
+                    direction = delta.scale(1.0 / distance);
+                }
+                double push = radius - distance + 1e-3;
+                adjusted = wrapPosition(adjusted.add(direction.scale(push)));
+            }
+        }
+        return adjusted;
     }
 }

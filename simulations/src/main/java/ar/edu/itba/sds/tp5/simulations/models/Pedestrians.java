@@ -20,6 +20,7 @@ public class Pedestrians implements Iterable<Particle>{
         this.time = 0.0;
         this.L = L;
         this.N = N;
+        Particle.resetStatics();
         //particles = generateParticles(N, L, rMin, rMax, vMax, null);
         particles = generateParticles(N, L, rMin, rMax, vMax);
     }
@@ -93,7 +94,7 @@ public class Pedestrians implements Iterable<Particle>{
                 if (!Contact.overlap(pi, pj, L)) continue;
                 if (!Contact.contactAcp(pi, pj, L)) continue;
 
-                final double dij = Contact.directDelta(pi.getPosition(), pj.getPosition()).length();
+                final double dij = Contact.directDelta(pi.getPosition(), pj.getPosition(), L).length();
                 final double pen = pi.getR() + pj.getR() - dij;
                 if (pen > bestPen) { bestPen = pen; best = pj; }
             }
@@ -143,7 +144,7 @@ public class Pedestrians implements Iterable<Particle>{
         final List<Integer> cand = new ArrayList<>();
         for (int j = 0; j < particles.size(); j++) {
             if (j == iIdx) continue;
-            final MathVector rij = particles.get(j).getPosition().subtract(ri);
+            final MathVector rij = MathVector.minImage(ri, particles.get(j).getPosition(), L);
             final double rijLen = rij.length();
             if (rijLen < EPS) continue;
             double cosang = heading.dot(rij) / rijLen;
@@ -155,8 +156,8 @@ public class Pedestrians implements Iterable<Particle>{
         }
 
         cand.sort((a, b) -> {
-            double da = particles.get(a).getPosition().subtract(ri).length();
-            double db = particles.get(b).getPosition().subtract(ri).length();
+            double da = MathVector.minImage(ri, particles.get(a).getPosition(), L).length();
+            double db = MathVector.minImage(ri, particles.get(b).getPosition(), L).length();
             return Double.compare(da, db);
         });
         final int use = Math.min(2, cand.size());
@@ -167,7 +168,7 @@ public class Pedestrians implements Iterable<Particle>{
         for (int k = 0; k < use; k++) {
             final Particle pj = particles.get(cand.get(k));
 
-            MathVector eij = ri.subtract(pj.getPosition());
+            MathVector eij = MathVector.minImage(pj.getPosition(), ri, L);
             final double dij = eij.length();
             if (dij < EPS) continue;
             eij = eij.scale(1.0 / dij);
@@ -176,7 +177,7 @@ public class Pedestrians implements Iterable<Particle>{
             final MathVector vij = vj.subtract(vi);
             if (vij.length() < EPS) continue;
 
-            final MathVector rij = pj.getPosition().subtract(ri);
+            final MathVector rij = MathVector.minImage(ri, pj.getPosition(), L);
             double rijLen = rij.length();
             if (rijLen < EPS) continue;
             double cosang = heading.dot(rij) / rijLen;
