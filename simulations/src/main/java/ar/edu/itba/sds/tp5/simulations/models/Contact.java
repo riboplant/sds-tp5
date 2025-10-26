@@ -5,13 +5,13 @@ public final class Contact {
     private static final double EPS = 1e-12;
     private Contact(){}
 
-    public static MathVector minImage(MathVector from, MathVector to, double L) {
-        double dx = to.x() - from.x();
-        double dy = to.y() - from.y();
-        dx -= L * Math.round(dx / L);
-        dy -= L * Math.round(dy / L);
-        return new MathVector(dx, dy);
-    }
+//    public static MathVector minImage(MathVector from, MathVector to, double L) {
+//        double dx = to.x() - from.x();
+//        double dy = to.y() - from.y();
+//        dx -= L * Math.round(dx / L);
+//        dy -= L * Math.round(dy / L);
+//        return new MathVector(dx, dy);
+//    }
 
     public static MathVector directDelta(MathVector from, MathVector to) {
         return new MathVector(to.x() - from.x(), to.y() - from.y());
@@ -83,18 +83,19 @@ public final class Contact {
     }
 
     public static MathVector escapeDir(Particle i, Particle j, double L) {
-        MathVector dji = directDelta(j.getPosition(), i.getPosition());
-        double n = dji.length();
-        if (n < EPS) {
-            double a = 2*Math.PI*Math.random();
-            return new MathVector(Math.cos(a), Math.sin(a));
+        MathVector eij = i.getPosition().subtract(j.getPosition());
+        double n = eij.length();
+        if (n >= EPS) {
+            return eij.scale(1.0 / n);
         }
-        return dji.scale(1.0 / n);
-    }
-
-    public static boolean contactWithCircle(Particle i, MathVector r0, double R0, double L) {
-        MathVector ri = i.getPosition();
-        MathVector dri = directDelta(ri, r0);
-        return dri.length() <= (R0 + i.getRMin());
+        MathVector vi = (i.getVelocity() != null) ? i.getVelocity() : MathVector.ZERO;
+        MathVector vj = (j.getVelocity() != null) ? j.getVelocity() : MathVector.ZERO;
+        MathVector vij = vj.subtract(vi);
+        if (vij.length() >= EPS) {
+            return vij.scale(-1.0 / vij.length());
+        }
+        MathVector et = i.directionToTarget();
+        if (et != null && et.length() >= EPS) return et.normalize();
+        return new MathVector(1.0, 0.0);
     }
 }

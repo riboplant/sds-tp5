@@ -44,7 +44,7 @@ public class Engine {
                     writer.write(String.valueOf(pedestrians.getTime()));
                     writer.newLine();
                     for(final Particle p : pedestrians) {
-                        writer.write("%f %f %f %f".formatted(
+                        writer.write("%.12f %.12f %.12f %.12f".formatted(
                                         p.getPosition().x(),
                                         p.getPosition().y(),
                                         p.getVelocity().x(),

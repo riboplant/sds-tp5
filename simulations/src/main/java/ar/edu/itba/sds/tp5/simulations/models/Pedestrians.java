@@ -6,7 +6,9 @@ import java.util.List;
 
 public class Pedestrians implements Iterable<Particle>{
 
-    private static final double EPS = 1e-6;
+    private final double Ap = 1.1;
+    private final double Bp = 2.1;
+    private static final double EPS = 1e-12;
 
     private final List<Particle> particles;
     private double time;
@@ -81,52 +83,137 @@ public class Pedestrians implements Iterable<Particle>{
     }
 
     public void step(final double dt) {
-        this.time += dt;
         final int n = particles.size();
-
-        boolean[] inContact = new boolean[n];
+        final boolean[] inContact = new boolean[n];
         final MathVector[] dirThisStep = new MathVector[n];
 
-        for (int id = 0; id < n; id++) {
-            Particle p = particles.get(id);
-
+        for (int i = 0; i < n; i++) {
+            final Particle pi = particles.get(i);
             Particle best = null;
-            double bestPenetration = Double.NEGATIVE_INFINITY;
+            double bestPen = Double.NEGATIVE_INFINITY;
 
-            for (int id2 = 0; id2 < n; id2++) {
-                if (id == id2) continue;
-                Particle q = particles.get(id2);
-                if (!Contact.overlap(p, q, L) || !Contact.contactAcp(p, q, L)) continue;
-                double dij = Contact.directDelta(p.getPosition(), q.getPosition()).length();
-                double penetration = p.getR() + q.getR() - dij;
-                if (penetration > bestPenetration) {
-                    bestPenetration = penetration;
-                    best = q;
-                }
+            for (int j = 0; j < n; j++) {
+                if (j == i) continue;
+                final Particle pj = particles.get(j);
+                if (!Contact.overlap(pi, pj, L)) continue;
+                if (!Contact.contactAcp(pi, pj, L)) continue;
+
+                final double dij = Contact.directDelta(pi.getPosition(), pj.getPosition()).length();
+                final double pen = pi.getR() + pj.getR() - dij;
+                if (pen > bestPen) { bestPen = pen; best = pj; }
             }
 
             if (best != null) {
-                inContact[id] = true;
-                dirThisStep[id]= Contact.escapeDir(p, best, L);
+                inContact[i] = true;
+                dirThisStep[i] = Contact.escapeDir(pi, best, L);
             } else {
-                inContact[id] = false;
-                MathVector eT = p.directionToTarget();
-                double nE = eT.length();
-                dirThisStep[id] = (nE < 1e-12) ? MathVector.ZERO : eT.scale(1.0/nE);
+                inContact[i] = false;
+                dirThisStep[i] = computeAvoidanceDirection(i);
+            }
+
+            if (dirThisStep[i] == null || dirThisStep[i].length() < EPS) {
+                final MathVector vi = pi.getVelocity();
+                dirThisStep[i] = (vi != null && vi.length() >= EPS) ? vi.normalize() : new MathVector(1.0, 0.0);
             }
         }
 
-        for (int id = 0; id < n; id++) {
-            final Particle p = particles.get(id);
-            p.updateRadius(inContact[id], dt);
-            p.updateVelocity(inContact[id], dirThisStep[id]);
+        for (int i = 0; i < n; i++) {
+            final Particle p = particles.get(i);
+            p.updateRadius(inContact[i], dt);
+            p.updateVelocity(inContact[i], dirThisStep[i]);
         }
 
-        for (int id = 0; id < n; id++) {
-            final Particle p = particles.get(id);
-            p.updatePosition(dt);
+        for (int i = 0; i < n; i++) {
+            final Particle p = particles.get(i);
+            p.updatePosition(dt, L);
         }
 
+        this.time += dt;
+    }
+
+    private MathVector  computeAvoidanceDirection(final int iIdx) {
+        final Particle pi = particles.get(iIdx);
+        final MathVector ri = pi.getPosition();
+        MathVector et = pi.directionToTarget();
+        if (et == null || et.length() < EPS) {
+            MathVector vi = pi.getVelocity();
+            et = (vi != null && vi.length() >= EPS) ? vi.normalize() : new MathVector(1.0, 0.0);
+        } else {
+            et = et.normalize();
+        }
+
+        MathVector heading = pi.getVelocity();
+        heading = (heading != null && heading.length() >= EPS) ? heading.normalize() : et;
+
+        final List<Integer> cand = new ArrayList<>();
+        for (int j = 0; j < particles.size(); j++) {
+            if (j == iIdx) continue;
+            final MathVector rij = particles.get(j).getPosition().subtract(ri);
+            final double rijLen = rij.length();
+            if (rijLen < EPS) continue;
+
+            double cosang = heading.dot(rij) / rijLen;
+            cosang = clamp(cosang, -1.0, 1.0);
+            double ang = Math.acos(cosang);
+            if (ang <= Math.PI / 2.0 + 1e-12) {
+                cand.add(j);
+            }
+        }
+        cand.sort((a, b) -> {
+            double da = particles.get(a).getPosition().subtract(ri).length();
+            double db = particles.get(b).getPosition().subtract(ri).length();
+            return Double.compare(da, db);
+        });
+        final int use = Math.min(2, cand.size());
+
+        MathVector sum = MathVector.ZERO;
+        final MathVector vi = (pi.getVelocity() != null) ? pi.getVelocity() : MathVector.ZERO;
+
+        for (int k = 0; k < use; k++) {
+            final Particle pj = particles.get(cand.get(k));
+
+            MathVector eij = ri.subtract(pj.getPosition());
+            final double dij = eij.length();
+            if (dij < EPS) continue;
+            eij = eij.scale(1.0 / dij);
+
+            final MathVector vj = (pj.getVelocity() != null) ? pj.getVelocity() : MathVector.ZERO;
+            final MathVector vij = vj.subtract(vi);
+            if (vij.length() < EPS) continue;
+
+            double denom = vij.length() * et.length();
+            if (denom < EPS) continue;
+            double cosb = vij.dot(et) / denom;
+            cosb = clamp(cosb, -1.0, 1.0);
+            double beta = Math.acos(cosb);
+            if (beta < Math.PI / 2.0) {
+                continue;
+            }
+
+            double cross = eij.x()*vij.y() - eij.y()*vij.x();
+            double dot = eij.x()*vij.x() + eij.y()*vij.y();
+            double alpha = Math.atan2(cross, dot);
+            double sgn = Math.signum(alpha);
+            // Case alpha ≈ 0 --> choose according to id
+            if (Math.abs(cross) < 1e-12 && dot > 0) {
+                sgn = (pi.getId() < pj.getId()) ? +1.0 : -1.0;
+            }
+            final double f = Math.abs(Math.abs(alpha) - Math.PI / 2.0);
+
+            MathVector eij_c = eij.rotate(-sgn * f);
+            MathVector njc = eij_c.scale(Ap * Math.exp(-dij / Bp));
+            sum = sum.add(njc);
+        }
+
+        MathVector ea = et.add(sum);
+        if (ea.length() < EPS) ea = et;
+        else ea = ea.normalize();
+
+        return ea;
+    }
+
+    private static double clamp(final double v, final double lo, final double hi) {
+        return Math.max(lo, Math.min(hi, v));
     }
 
     @Override
