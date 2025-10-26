@@ -3,8 +3,11 @@ package ar.edu.itba.sds.tp5.simulations.models;
 import java.util.Random;
 
 public class Particle {
-    private static final Random RANDOM = new Random();
+    private static final Random RANDOM = new Random(12345);
     private static final double EPS = 1e-12;
+    private static final double EPS_IN  = 0.12;
+    private static final double EPS_OUT = 0.20;
+    private static final double TARGET_PADDING = 0.50;
     private static final double TAU = 0.5;
     private static final double BETA = 0.9;
     private static int idCounter = 0;
@@ -20,6 +23,7 @@ public class Particle {
     private MathVector position;
     private MathVector prevPosition;
     private MathVector target;
+    private boolean arrived = false;
 
     public Particle(double rMin, double rMax, double v, double L) {
         this.rMin = rMin;
@@ -111,10 +115,36 @@ public class Particle {
     public void updatePosition(double dt, double L) {
         this.position = this.position.add(this.velocity.scale(dt));
 
-        MathVector d = this.position.subtract(this.target);
-        if (d.length() <= EPS) {
-            this.target = new MathVector(RANDOM.nextDouble() * L, RANDOM.nextDouble() * L);
+        // Update target if it has been reached
+        double d = this.position.subtract(this.target).length();
+        if (!arrived && d <= EPS_IN) {
+            MathVector nt = null;
+            int tries = 0;
+            do {
+                nt = randomTargetInBox(L);
+                tries++;
+            } while (this.position.subtract(nt).length() < TARGET_PADDING && tries < 10);
+
+            if (this.position.subtract(nt).length() < TARGET_PADDING) {
+                final double x = (this.position.x() < L*0.5)
+                        ? (L*0.5 + RANDOM.nextDouble()*(L*0.5))
+                        : (RANDOM.nextDouble()*(L*0.5));
+                final double y = (this.position.y() < L*0.5)
+                        ? (L*0.5 + RANDOM.nextDouble()*(L*0.5))
+                        : (RANDOM.nextDouble()*(L*0.5));
+                nt = new MathVector(x, y);
+            }
+
+            this.target = nt;
+            this.arrived = true;
+
+        } else if (arrived && d >= EPS_OUT) {
+            this.arrived = false;
         }
+    }
+
+    private MathVector randomTargetInBox(final double L) {
+        return new MathVector(RANDOM.nextDouble() * L, RANDOM.nextDouble() * L);
     }
 
     public MathVector directionToTarget() {

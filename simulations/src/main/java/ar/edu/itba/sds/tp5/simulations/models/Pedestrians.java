@@ -78,7 +78,9 @@ public class Pedestrians implements Iterable<Particle>{
     public static List<Particle> generateParticles(final double rMin, final double rMax, final double vMax) {
         return List.of(
                 new Particle(1, 3, 5, 3, rMin, rMax, vMax),
-                new Particle(5, 3, 1, 3, rMin, rMax, vMax)
+                new Particle(5, 3, 1, 3, rMin, rMax, vMax),
+                new Particle(3, 2, 3, 5, rMin, rMax, vMax),
+                new Particle(3, 5, 3, 1, rMin, rMax, vMax)
         );
     }
 
@@ -151,7 +153,6 @@ public class Pedestrians implements Iterable<Particle>{
             final MathVector rij = particles.get(j).getPosition().subtract(ri);
             final double rijLen = rij.length();
             if (rijLen < EPS) continue;
-
             double cosang = heading.dot(rij) / rijLen;
             cosang = clamp(cosang, -1.0, 1.0);
             double ang = Math.acos(cosang);
@@ -159,6 +160,7 @@ public class Pedestrians implements Iterable<Particle>{
                 cand.add(j);
             }
         }
+
         cand.sort((a, b) -> {
             double da = particles.get(a).getPosition().subtract(ri).length();
             double db = particles.get(b).getPosition().subtract(ri).length();
@@ -181,6 +183,15 @@ public class Pedestrians implements Iterable<Particle>{
             final MathVector vij = vj.subtract(vi);
             if (vij.length() < EPS) continue;
 
+            final MathVector rij = pj.getPosition().subtract(ri);
+            double rijLen = rij.length();
+            if (rijLen < EPS) continue;
+            double cosang = heading.dot(rij) / rijLen;
+            cosang = clamp(cosang, -1.0, 1.0);
+            double ang = Math.acos(cosang);
+            final double taper = Math.pow(Math.max(0.0, Math.cos(ang)), 2.0);
+            if (taper <= 0.0) continue;
+
             double denom = vij.length() * et.length();
             if (denom < EPS) continue;
             double cosb = vij.dot(et) / denom;
@@ -194,14 +205,17 @@ public class Pedestrians implements Iterable<Particle>{
             double dot = eij.x()*vij.x() + eij.y()*vij.y();
             double alpha = Math.atan2(cross, dot);
             double sgn = Math.signum(alpha);
+
             // Case alpha ≈ 0 --> choose according to id
             if (Math.abs(cross) < 1e-12 && dot > 0) {
                 sgn = (pi.getId() < pj.getId()) ? +1.0 : -1.0;
             }
             final double f = Math.abs(Math.abs(alpha) - Math.PI / 2.0);
 
+            double w = (ang <= Math.PI/2) ? 0.5*(1 + Math.cos(2*ang)) : 0;
+
             MathVector eij_c = eij.rotate(-sgn * f);
-            MathVector njc = eij_c.scale(Ap * Math.exp(-dij / Bp));
+            MathVector njc = eij_c.scale(Ap * Math.exp(-dij / Bp) * taper).scale(w);
             sum = sum.add(njc);
         }
 
