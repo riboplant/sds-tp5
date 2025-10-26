@@ -7,9 +7,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Date;
+import java.util.Locale;
 
 public class Engine {
     public static void main(String[] args) throws IOException {
+        Locale.setDefault(Locale.US);
         final double L = 6.0;
         final double vDesiredMax = 1.7;
         final double rMin = 0.1;
@@ -22,8 +24,10 @@ public class Engine {
         final int step = Integer.parseInt(System.getProperty("step", "1"));
         final double t_f = Double.parseDouble(System.getProperty("t_f", "10.0"));
 
+        System.out.printf("%d%n", N);
         System.out.println("Running simulation: " + simulationName);
 
+        final Pedestrians pedestrians = new Pedestrians(N, L, rMin, rMax, vDesiredMax);
         final Path simulationDirPath = Path.of("..","data", "simulations", simulationName);
         Files.createDirectories(simulationDirPath);
         try (var writer = Files.newBufferedWriter(simulationDirPath.resolve("static.txt"))) {
@@ -33,9 +37,12 @@ public class Engine {
             writer.newLine();
             writer.write(String.valueOf(rMin));
             writer.newLine();
+            for(final Particle p : pedestrians) {
+                writer.write(p.isFixed() ? "F" : "M");
+                writer.newLine();
+            }
         }
 
-        final Pedestrians pedestrians = new Pedestrians(N, L, rMin, rMax, vDesiredMax);
         int t = 0;
         try (var writer = Files.newBufferedWriter(simulationDirPath.resolve("dynamic.txt"))) {
             do {
@@ -43,11 +50,12 @@ public class Engine {
                     writer.write(String.valueOf(pedestrians.getTime()));
                     writer.newLine();
                     for(final Particle p : pedestrians) {
-                        writer.write("%.12f %.12f %.12f %.12f".formatted(
+                        writer.write("%.12f %.12f %.12f %.12f %.12f".formatted(
                                         p.getPosition().x(),
                                         p.getPosition().y(),
                                         p.getVelocity().x(),
-                                        p.getVelocity().y()
+                                        p.getVelocity().y(),
+                                        p.getR()
                                 )
                         );
                         writer.newLine();
@@ -58,6 +66,6 @@ public class Engine {
             } while (pedestrians.getTime() < t_f);
         }
 
-        System.out.println("System created with " + pedestrians.getParticles().size() + " particles.");
+        System.out.println("System created with " + N + " particles.");
     }
 }

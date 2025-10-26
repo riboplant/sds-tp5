@@ -20,10 +20,20 @@ def read_static(static_path: Path):
     L = float(lines[0])
     N = int(lines[1])
     R = float(lines[2])
-    return L, N, R
+    raw_states = [line.upper() for line in lines[3:]]
+    if not raw_states:
+        raise ValueError(f"static.txt at {static_path} does not list particle states after the first 3 lines.")
+    states = []
+    for idx, state in enumerate(raw_states):
+        if state not in ('M', 'F'):
+            raise ValueError(f"Unexpected state '{state}' for particle {idx + 1}. Expected 'M' or 'F'.")
+        states.append(state)
+    if len(states) < N:
+        raise ValueError(f"static.txt declares N={N} but provides only {len(states)} particle states.")
+    return L, N, R, states
 
 
-def read_dynamic(dynamic_path: Path, N: int):
+def read_dynamic(dynamic_path: Path, count: int):
     frames_t = []
     frames = []
 
@@ -41,24 +51,25 @@ def read_dynamic(dynamic_path: Path, N: int):
             except ValueError as e:
                 raise ValueError(f"Expected a time value, got '{t_line}'") from e
 
-            xs, ys, vxs, vys = [], [], [], []
-            for i in range(N):
+            xs, ys, vxs, vys, rs = [], [], [], [], []
+            for i in range(count):
                 data_line = f.readline()
                 if not data_line:
-                    raise ValueError(f"Unexpected EOF while reading particle {i+1}/{N} at time {t}")
+                    raise ValueError(f"Unexpected EOF while reading particle {i+1}/{count} at time {t}")
                 parts = data_line.strip().split()
-                if len(parts) < 4:
-                    raise ValueError(f"Expected x y vx vy on line: '{data_line.strip()}'")
-                x, y, vx, vy = map(float, parts[:4])
-                xs.append(x); ys.append(y); vxs.append(vx); vys.append(vy)
+                if len(parts) < 5:
+                    raise ValueError(f"Expected x y vx vy r on line: '{data_line.strip()}'")
+                x, y, vx, vy, r = map(float, parts[:5])
+                xs.append(x); ys.append(y); vxs.append(vx); vys.append(vy); rs.append(r)
 
             frames_t.append(t)
-            frames.append((xs, ys, vxs, vys))
+            frames.append((xs, ys, vxs, vys, rs))
 
     return frames_t, frames
 
 
-def make_animation(L, N, R, times, frames, slow_factor: float):
+def make_animation(L, R, times, frames, slow_factor: float, states):
+    count = len(states)
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(0, L)
     ax.set_ylim(0, L)
@@ -66,20 +77,30 @@ def make_animation(L, N, R, times, frames, slow_factor: float):
     ax.set_axis_off()
     border = Rectangle((0, 0), L, L, fill=False, linewidth=1.5)
     ax.add_patch(border)
-    edge_color = 'C0'
-    face_rgba = mcolors.to_rgba('C0', 0.25)
 
-    patches = [Circle((0, 0), R, facecolor=face_rgba, edgecolor=edge_color, linewidth=2.0) for _ in range(N)]
+    move_edge = 'C0'
+    move_face = mcolors.to_rgba(move_edge, 0.25)
+    fixed_edge = 'red'
+    fixed_face = mcolors.to_rgba(fixed_edge, 0.25)
+
+    patches = []
+    for i in range(count):
+        is_fixed = states[i] == 'F'
+        edge_color = fixed_edge if is_fixed else move_edge
+        face_rgba = fixed_face if is_fixed else move_face
+        circle = Circle((0, 0), R, facecolor=face_rgba, edgecolor=edge_color, linewidth=2.0)
+        patches.append(circle)
+
     for c in patches:
         ax.add_patch(c)
 
     # Velocity arrow scale
     vel_scale = 0.30
-    zeros = [0.0] * N
+    zeros = [0.0] * count
     quiv = ax.quiver(
         zeros, zeros, zeros, zeros,
         angles='xy', scale_units='xy', scale=1.0,
-        width=0.003, color=edge_color
+        width=0.003, color=move_edge
     )
 
     time_text = ax.text(0.02, 0.98, '', transform=ax.transAxes, va='top')
@@ -93,10 +114,11 @@ def make_animation(L, N, R, times, frames, slow_factor: float):
         return (*patches, quiv, time_text)
 
     def update(frame_idx):
-        xs, ys, vxs, vys = frames[frame_idx]
+        xs, ys, vxs, vys, rs = frames[frame_idx]
 
         for i, c in enumerate(patches):
             c.center = (xs[i], ys[i])
+            c.radius = rs[i]
 
         vxs_s = [vx * vel_scale for vx in vxs]
         vys_s = [vy * vel_scale for vy in vys]
@@ -139,14 +161,15 @@ def main():
         print(f"ERROR: dynamic file not found: {dynamic_path}", file=sys.stderr)
         sys.exit(1)
 
-    L, N, R = read_static(static_path)
-    times, frames = read_dynamic(dynamic_path, N)
+    L, N, R, states = read_static(static_path)
+    total_particles = len(states)
+    times, frames = read_dynamic(dynamic_path, total_particles)
 
     if len(frames) == 0:
         print("No frames found in dynamic.txt. Nothing to animate.", file=sys.stderr)
         sys.exit(1)
 
-    fig, ani = make_animation(L, N, R, times, frames, args.slow)
+    fig, ani = make_animation(L, R, times, frames, args.slow, states)
     plt.tight_layout()
 
     out_dir = REPO_ROOT / 'data' / 'animations'

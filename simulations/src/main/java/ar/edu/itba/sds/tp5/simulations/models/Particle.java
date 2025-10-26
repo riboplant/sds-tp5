@@ -45,6 +45,7 @@ public class Particle {
         this.rMin = rDefault;
         this.rMax = rDefault;
         this.vDesiredMax = 0.0;
+        this.velocity = MathVector.ZERO;
         this.id = idCounter++;
         this.prevR = rDefault;
         this.position = new MathVector(L / 2.0, L / 2.0);
@@ -77,6 +78,7 @@ public class Particle {
     }
 
     public void updateRadius(boolean isCollision, double dt) {
+        if(isFixed) return;
         if (isCollision) {
             this.r = this.rMin;
             this.prevR = this.rMin;
@@ -87,6 +89,7 @@ public class Particle {
     }
 
     public void updateVelocity(boolean isFrontalContact, MathVector e) {
+        if(isFixed) return;
         MathVector dir = e;
         if (dir == null || dir.length() < 1e-12) {
             if (this.velocity != null && this.velocity.length() >= 1e-12) {
@@ -113,6 +116,7 @@ public class Particle {
     }
 
     public void updatePosition(double dt, double L) {
+        if(isFixed) return;
         this.position = this.position.add(this.velocity.scale(dt));
 
         // Update target if it has been reached

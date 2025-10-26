@@ -21,7 +21,7 @@ public class Pedestrians implements Iterable<Particle>{
         this.L = L;
         this.N = N;
         //particles = generateParticles(N, L, rMin, rMax, vMax, null);
-        particles = generateParticles(rMin, rMax, vMax);
+        particles = generateParticles(N, L, rMin, rMax, vMax);
     }
 
     private static double distPBC(MathVector p1, MathVector p2, double L) {
@@ -32,69 +32,62 @@ public class Pedestrians implements Iterable<Particle>{
         return Math.hypot(dx, dy);
     }
 
-//    public static List<Particle> generateParticles(final int N, final double L, final double rMin, final double rMax,
-//        final double vMax, final Particle fixed) {
-//
-//        final List<Particle> ps = new ArrayList<>(N);
-//
-//        final int MAX_TRIES_PER_PARTICLE = 50_000;
-//
-//        for (int k = 0; k < N; k++) {
-//            boolean placed = false;
-//            for (int tries = 0; tries < MAX_TRIES_PER_PARTICLE; tries++) {
-//                Particle cand = new Particle(rMin, rMax, vMax, L);
-//
-//                if (fixed != null) {
-//                    double d0 = distPBC(cand.getPosition(), fixed.getPosition(), L);
-//                    if (d0 <= (cand.getRMin() + fixed.getRMin() + EPS)) continue;
-//                }
-//
-//                boolean ok = true;
-//                for (Particle q : ps) {
-//                    double d = distPBC(cand.getPosition(), q.getPosition(), L);
-//
-//                    if (d <= (cand.getR() + q.getR() + EPS)) { ok = false; break; }
-//
-//                    // No collition in rMax
-//                    // if (d <= (rMax + rMax + EPS)) { ok = false; break; }
-//                }
-//
-//                if (ok) {
-//                    ps.add(cand);
-//                    placed = true;
-//                    break;
-//                }
-//            }
-//            if (!placed) {
-//                throw new IllegalStateException(
-//                        "No pude ubicar la partícula #" + k + " sin solapes tras " + MAX_TRIES_PER_PARTICLE + " intentos."
-//                );
-//            }
-//        }
-//        return ps;
-//    }
+   public static List<Particle> generateParticles(final int N, final double L, final double rMin, final double rMax,
+       final double vMax) {
+       final List<Particle> ps = new ArrayList<>(List.of(new Particle(true, 0.21, L)));
+
+       final int MAX_TRIES_PER_PARTICLE = 50_000;
+
+       for (int k = 0; k < N; k++) {
+           boolean placed = false;
+           for (int tries = 0; tries < MAX_TRIES_PER_PARTICLE; tries++) {
+               Particle cand = new Particle(rMin, rMax, vMax, L);
+
+               boolean ok = true;
+               for (Particle q : ps) {
+                   double d = distPBC(cand.getPosition(), q.getPosition(), L);
+
+                   if (d <= (cand.getR() + q.getR() + EPS)) { ok = false; break; }
+
+                   // No collition in rMax
+                   // if (d <= (rMax + rMax + EPS)) { ok = false; break; }
+               }
+
+               if (ok) {
+                   ps.add(cand);
+                   placed = true;
+                   break;
+               }
+           }
+           if (!placed) {
+               throw new IllegalStateException(
+                       "No pude ubicar la partícula #" + k + " sin solapes tras " + MAX_TRIES_PER_PARTICLE + " intentos."
+               );
+           }
+       }
+       return ps;
+   }
 
     //@TODO: borrar, es de prueba
-    public static List<Particle> generateParticles(final double rMin, final double rMax, final double vMax) {
+    /* public static List<Particle> generateParticles(final double rMin, final double rMax, final double vMax) {
         return List.of(
                 new Particle(1, 3, 5, 3, rMin, rMax, vMax),
                 new Particle(5, 3, 1, 3, rMin, rMax, vMax),
                 new Particle(3, 2, 3, 5, rMin, rMax, vMax),
                 new Particle(3, 5, 3, 1, rMin, rMax, vMax)
         );
-    }
+    } */
 
     public void step(final double dt) {
-        final int n = particles.size();
-        final boolean[] inContact = new boolean[n];
-        final MathVector[] dirThisStep = new MathVector[n];
+        final boolean[] inContact = new boolean[N+1];
+        final MathVector[] dirThisStep = new MathVector[N+1];
 
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i <= N; i++) {
             final Particle pi = particles.get(i);
             Particle best = null;
             double bestPen = Double.NEGATIVE_INFINITY;
 
-            for (int j = 0; j < n; j++) {
+            for (int j = 0; j < particles.size(); j++) {
                 if (j == i) continue;
                 final Particle pj = particles.get(j);
                 if (!Contact.overlap(pi, pj, L)) continue;
@@ -119,13 +112,13 @@ public class Pedestrians implements Iterable<Particle>{
             }
         }
 
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i <= N; i++) {
             final Particle p = particles.get(i);
             p.updateRadius(inContact[i], dt);
             p.updateVelocity(inContact[i], dirThisStep[i]);
         }
 
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i <= N; i++) {
             final Particle p = particles.get(i);
             p.updatePosition(dt, L);
         }
