@@ -24,7 +24,6 @@ public class Engine {
         final int step = Integer.parseInt(System.getProperty("step", "1"));
         final double t_f = Double.parseDouble(System.getProperty("t_f", "10.0"));
 
-        System.out.printf("%d%n", N);
         System.out.println("Running simulation: " + simulationName);
 
         final Pedestrians pedestrians = new Pedestrians(N, L, rMin, rMax, vDesiredMax);
@@ -37,6 +36,8 @@ public class Engine {
             writer.newLine();
             writer.write(String.valueOf(rMin));
             writer.newLine();
+            writer.write(String.valueOf(rMax));
+            writer.newLine();
             for(final Particle p : pedestrians) {
                 writer.write(p.isFixed() ? "F" : "M");
                 writer.newLine();
@@ -47,17 +48,18 @@ public class Engine {
         try (var writer = Files.newBufferedWriter(simulationDirPath.resolve("dynamic.txt"))) {
             do {
                 if(t % step == 0) {
-                    writer.write(String.valueOf(pedestrians.getTime()));
+                    System.out.println("Time: " + pedestrians.getTime() + "s");
+                    writer.write(String.format(Locale.US, "%.12f %d", pedestrians.getTime(), pedestrians.getTotalCentralContacts()));
                     writer.newLine();
                     for(final Particle p : pedestrians) {
-                        writer.write("%.12f %.12f %.12f %.12f %.12f".formatted(
-                                        p.getPosition().x(),
-                                        p.getPosition().y(),
-                                        p.getVelocity().x(),
-                                        p.getVelocity().y(),
-                                        p.getR()
-                                )
-                        );
+                        final double x = p.getPosition().x();
+                        final double y = p.getPosition().y();
+                        final var velocity = p.getVelocity();
+                        final double vx = (velocity != null) ? velocity.x() : 0.0;
+                        final double vy = (velocity != null) ? velocity.y() : 0.0;
+                        final double radius = p.getR();
+                        writer.write(String.format(Locale.US, "%.12f %.12f %.12f %.12f %.12f",
+                                x, y, vx, vy, radius));
                         writer.newLine();
                     }
                 }

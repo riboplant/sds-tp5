@@ -14,6 +14,10 @@ public class Pedestrians implements Iterable<Particle>{
     private double time;
     private final double L;
     private final int N;
+    private final boolean[] touchedCentral;
+    private final boolean[] crossedSinceLastCentralContact;
+    private final boolean[] touchingCentralNow;
+    private int totalCentralContacts = 0;
 
     public Pedestrians(final int N, final double L, final double rMin, final double rMax,
                        final double vMax) {
@@ -23,6 +27,10 @@ public class Pedestrians implements Iterable<Particle>{
         Particle.resetStatics();
         //particles = generateParticles(N, L, rMin, rMax, vMax, null);
         particles = generateParticles(N, L, rMin, rMax, vMax);
+        touchedCentral = new boolean[N + 1];
+        crossedSinceLastCentralContact = new boolean[N + 1];
+        touchingCentralNow = new boolean[N + 1];
+        totalCentralContacts = 0;
     }
 
     private static double distPBC(MathVector p1, MathVector p2, double L) {
@@ -124,6 +132,8 @@ public class Pedestrians implements Iterable<Particle>{
             p.updatePosition(dt, L);
         }
 
+        updateCentralCollisionStats();
+
         this.time += dt;
     }
 
@@ -218,6 +228,33 @@ public class Pedestrians implements Iterable<Particle>{
         else ea = ea.normalize();
 
         return ea;
+    }
+
+    private void updateCentralCollisionStats() {
+        if (particles.isEmpty()) {
+            return;
+        }
+        final Particle central = particles.get(0);
+        for (int i = 1; i <= N; i++) {
+            final Particle p = particles.get(i);
+            if (p.consumeBoundaryCrossingFlag()) {
+                crossedSinceLastCentralContact[i] = true;
+            }
+            final boolean touching = Contact.overlap(p, central, L);
+            if (touching && !touchingCentralNow[i]) {
+                final boolean shouldCount = !touchedCentral[i] || crossedSinceLastCentralContact[i];
+                if (shouldCount) {
+                    totalCentralContacts++;
+                    touchedCentral[i] = true;
+                    crossedSinceLastCentralContact[i] = false;
+                }
+            }
+            touchingCentralNow[i] = touching;
+        }
+    }
+
+    public int getTotalCentralContacts() {
+        return totalCentralContacts;
     }
 
     private static double clamp(final double v, final double lo, final double hi) {

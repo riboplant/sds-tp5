@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Random;
 
 public class Particle {
-    private static final Random RANDOM = new Random(12345);
+    private static final Random RANDOM = new Random();
     private static final double EPS = 1e-12;
     private static final double EPS_IN  = 0.12;
     private static final double EPS_OUT = 0.20;
@@ -31,12 +31,13 @@ public class Particle {
     private MathVector prevPosition;
     private MathVector target;
     private boolean arrived = false;
+    private boolean crossedBoundarySinceLastQuery = false;
 
     public Particle(double rMin, double rMax, double v, double L) {
         this.rMin = rMin;
         this.rMax = rMax;
         this.id = idCounter++;
-        this.r = rMin + (rMax - rMin) * RANDOM.nextDouble();
+        this.r = rMin;
         this.prevR = r;
         this.L = L;
         final double angle = RANDOM.nextDouble() * 2 * Math.PI;
@@ -128,7 +129,12 @@ public class Particle {
 
     public void updatePosition(double dt, double L) {
         if(isFixed) return;
-        this.position = wrapPosition(this.position.add(this.velocity.scale(dt)));
+        MathVector candidate = this.position.add(this.velocity.scale(dt));
+        MathVector wrapped = wrapPosition(candidate);
+        if (Math.abs(candidate.x() - wrapped.x()) > 1e-9 || Math.abs(candidate.y() - wrapped.y()) > 1e-9) {
+            crossedBoundarySinceLastQuery = true;
+        }
+        this.position = wrapped;
 
         // Update target if it has been reached
         double d = MathVector.minImage(this.position, this.target, this.L).length();
@@ -197,6 +203,12 @@ public class Particle {
 
     private MathVector wrapPosition(MathVector pos) {
         return pos.wrapToBox(this.L);
+    }
+
+    public boolean consumeBoundaryCrossingFlag() {
+        boolean crossed = crossedBoundarySinceLastQuery;
+        crossedBoundarySinceLastQuery = false;
+        return crossed;
     }
 
     private static void registerFixedObstacle(MathVector center, double radius) {

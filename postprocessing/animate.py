@@ -15,14 +15,15 @@ BASE_PATH = REPO_ROOT / 'data' / 'simulations'
 def read_static(static_path: Path):
     with static_path.open('r') as f:
         lines = [line.strip() for line in f if line.strip() != '']
-    if len(lines) < 3:
-        raise ValueError(f"static.txt at {static_path} has {len(lines)} lines, expected 3.")
+    if len(lines) < 4:
+        raise ValueError(f"static.txt at {static_path} has {len(lines)} lines, expected at least 4.")
     L = float(lines[0])
     N = int(lines[1])
-    R = float(lines[2])
-    raw_states = [line.upper() for line in lines[3:]]
+    r_min = float(lines[2])
+    r_max = float(lines[3])
+    raw_states = [line.upper() for line in lines[4:]]
     if not raw_states:
-        raise ValueError(f"static.txt at {static_path} does not list particle states after the first 3 lines.")
+        raise ValueError(f"static.txt at {static_path} does not list particle states after the first 4 lines.")
     states = []
     for idx, state in enumerate(raw_states):
         if state not in ('M', 'F'):
@@ -30,7 +31,7 @@ def read_static(static_path: Path):
         states.append(state)
     if len(states) < N:
         raise ValueError(f"static.txt declares N={N} but provides only {len(states)} particle states.")
-    return L, N, R, states
+    return L, N, r_min, r_max, states
 
 
 def read_dynamic(dynamic_path: Path, count: int):
@@ -47,9 +48,14 @@ def read_dynamic(dynamic_path: Path, count: int):
                 continue
 
             try:
-                t = float(t_line)
+                parts = t_line.split()
+                if len(parts) == 0:
+                    continue
+                t = float(parts[0])
+                if len(parts) > 1:
+                    _total_hits = int(parts[1])
             except ValueError as e:
-                raise ValueError(f"Expected a time value, got '{t_line}'") from e
+                raise ValueError(f"Expected a time value (and optional total contact count), got '{t_line}'") from e
 
             xs, ys, vxs, vys, rs = [], [], [], [], []
             for i in range(count):
@@ -68,7 +74,7 @@ def read_dynamic(dynamic_path: Path, count: int):
     return frames_t, frames
 
 
-def make_animation(L, R, times, frames, slow_factor: float, states):
+def make_animation(L, r_min, r_max, times, frames, slow_factor: float, states):
     count = len(states)
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(0, L)
@@ -88,7 +94,7 @@ def make_animation(L, R, times, frames, slow_factor: float, states):
         is_fixed = states[i] == 'F'
         edge_color = fixed_edge if is_fixed else move_edge
         face_rgba = fixed_face if is_fixed else move_face
-        circle = Circle((0, 0), R, facecolor=face_rgba, edgecolor=edge_color, linewidth=2.0)
+        circle = Circle((0, 0), r_min if is_fixed else r_max, facecolor=face_rgba, edgecolor=edge_color, linewidth=2.0)
         patches.append(circle)
 
     for c in patches:
@@ -118,7 +124,7 @@ def make_animation(L, R, times, frames, slow_factor: float, states):
 
         for i, c in enumerate(patches):
             c.center = (xs[i], ys[i])
-            c.radius = rs[i]
+            c.set_radius(rs[i])
 
         vxs_s = [vx * vel_scale for vx in vxs]
         vys_s = [vy * vel_scale for vy in vys]
@@ -161,7 +167,7 @@ def main():
         print(f"ERROR: dynamic file not found: {dynamic_path}", file=sys.stderr)
         sys.exit(1)
 
-    L, N, R, states = read_static(static_path)
+    L, N, r_min, r_max, states = read_static(static_path)
     total_particles = len(states)
     times, frames = read_dynamic(dynamic_path, total_particles)
 
@@ -169,7 +175,7 @@ def main():
         print("No frames found in dynamic.txt. Nothing to animate.", file=sys.stderr)
         sys.exit(1)
 
-    fig, ani = make_animation(L, R, times, frames, args.slow, states)
+    fig, ani = make_animation(L, r_min, r_max, times, frames, args.slow, states)
     plt.tight_layout()
 
     out_dir = REPO_ROOT / 'data' / 'animations'
