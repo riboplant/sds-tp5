@@ -33,14 +33,15 @@ def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float]:
         raise ValueError(
             f"static declares N={declared_N} but only {len(states)} particle states were provided in {static_path}"
         )
-    return L, states, r_min, r_max
+    return L, states, r_min, r_max, declared_N
 
 
 def packing_fraction(L: float, states: Iterable[str], r_min: float, r_max: float) -> float:
     """Compute φ = Σ π r_i^2 / L², assuming fixed particles use r_max and moving ones r_min."""
     area = 0.0
+    moving_radius = 0.5 * (r_min + r_max)
     for s in states:
-        radius = r_max if s == "F" else r_min
+        radius = r_max if s == "F" else moving_radius
         area += math.pi * radius * radius
     return area / (L * L)
 
@@ -95,11 +96,11 @@ def plot_hits(sim_names: List[str]) -> None:
         if not sim_dir.exists():
             raise FileNotFoundError(f"Simulation directory not found: {sim_dir}")
 
-        L, states, r_min, r_max = read_static(sim_dir)
+        L, states, r_min, r_max, declared_N = read_static(sim_dir)
         phi = packing_fraction(L, states, r_min, r_max)
         times, hits = read_hits(sim_dir, len(states))
 
-        label = f"{sim_name} - φ={phi:.4f}"
+        label = f"N={declared_N} - φ={phi:.4f}"
         plt.plot(times, hits, label=label)
 
     plt.xlabel("Time [s]")
@@ -126,4 +127,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

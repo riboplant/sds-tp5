@@ -23,7 +23,7 @@ public final class Contact {
         MathVector vi = i.getVelocity();
         MathVector e;
         if (vi.length() < 1e-8) {
-            e = i.directionToTarget().normalize();
+            e = i.getDirectionToTarget();
         } else {
             e = vi.normalize();
         }
@@ -48,7 +48,7 @@ public final class Contact {
         MathVector vi = i.getVelocity();
         MathVector e;
         if (vi.length() < 1e-8) {
-            MathVector toT = i.directionToTarget();
+            MathVector toT = i.getDirectionToTarget();
             double nt = toT.length();
             if (nt < 1e-8) return false;
             e = toT.scale(1.0/nt);
@@ -94,7 +94,7 @@ public final class Contact {
         if (vij.length() >= EPS) {
             return vij.scale(-1.0 / vij.length());
         }
-        MathVector et = i.directionToTarget();
+        MathVector et = i.getDirectionToTarget();
         if (et != null && et.length() >= EPS) return et.normalize();
         return new MathVector(1.0, 0.0);
     }

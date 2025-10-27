@@ -140,12 +140,10 @@ public class Pedestrians implements Iterable<Particle>{
     private MathVector  computeAvoidanceDirection(final int iIdx) {
         final Particle pi = particles.get(iIdx);
         final MathVector ri = pi.getPosition();
-        MathVector et = pi.directionToTarget();
+        MathVector et = pi.getDirectionToTarget();
         if (et == null || et.length() < EPS) {
             MathVector vi = pi.getVelocity();
             et = (vi != null && vi.length() >= EPS) ? vi.normalize() : new MathVector(1.0, 0.0);
-        } else {
-            et = et.normalize();
         }
 
         MathVector heading = pi.getVelocity();
@@ -235,10 +233,12 @@ public class Pedestrians implements Iterable<Particle>{
             return;
         }
         final Particle central = particles.get(0);
+        central.setHasTouchedCentral(false);
         for (int i = 1; i <= N; i++) {
             final Particle p = particles.get(i);
             if (p.consumeBoundaryCrossingFlag()) {
                 crossedSinceLastCentralContact[i] = true;
+                p.setHasTouchedCentral(false);
             }
             final boolean touching = Contact.overlap(p, central, L);
             if (touching && !touchingCentralNow[i]) {
@@ -250,6 +250,9 @@ public class Pedestrians implements Iterable<Particle>{
                 }
             }
             touchingCentralNow[i] = touching;
+            if (touching) {
+                p.setHasTouchedCentral(true);
+            }
         }
     }
 

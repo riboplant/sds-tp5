@@ -57,7 +57,7 @@ def read_dynamic(dynamic_path: Path, count: int):
             except ValueError as e:
                 raise ValueError(f"Expected a time value (and optional total contact count), got '{t_line}'") from e
 
-            xs, ys, vxs, vys, rs = [], [], [], [], []
+            xs, ys, vxs, vys, rs, contacts = [], [], [], [], [], []
             for i in range(count):
                 data_line = f.readline()
                 if not data_line:
@@ -66,10 +66,17 @@ def read_dynamic(dynamic_path: Path, count: int):
                 if len(parts) < 5:
                     raise ValueError(f"Expected x y vx vy r on line: '{data_line.strip()}'")
                 x, y, vx, vy, r = map(float, parts[:5])
+                contact_flag = 0
+                if len(parts) >= 6:
+                    try:
+                        contact_flag = 1 if int(float(parts[5])) != 0 else 0
+                    except ValueError as exc:
+                        raise ValueError(f"Invalid contact flag '{parts[5]}' for particle {i+1} at time {t}") from exc
                 xs.append(x); ys.append(y); vxs.append(vx); vys.append(vy); rs.append(r)
+                contacts.append(contact_flag)
 
             frames_t.append(t)
-            frames.append((xs, ys, vxs, vys, rs))
+            frames.append((xs, ys, vxs, vys, rs, contacts))
 
     return frames_t, frames
 
@@ -88,14 +95,20 @@ def make_animation(L, r_min, r_max, times, frames, slow_factor: float, states):
     move_face = mcolors.to_rgba(move_edge, 0.25)
     fixed_edge = 'red'
     fixed_face = mcolors.to_rgba(fixed_edge, 0.25)
+    contact_edge = 'green'
+    contact_face = mcolors.to_rgba(contact_edge, 0.35)
 
     patches = []
+    base_edge_colors = []
+    base_face_colors = []
     for i in range(count):
         is_fixed = states[i] == 'F'
         edge_color = fixed_edge if is_fixed else move_edge
         face_rgba = fixed_face if is_fixed else move_face
         circle = Circle((0, 0), r_min if is_fixed else r_max, facecolor=face_rgba, edgecolor=edge_color, linewidth=2.0)
         patches.append(circle)
+        base_edge_colors.append(edge_color)
+        base_face_colors.append(face_rgba)
 
     for c in patches:
         ax.add_patch(c)
@@ -120,11 +133,17 @@ def make_animation(L, r_min, r_max, times, frames, slow_factor: float, states):
         return (*patches, quiv, time_text)
 
     def update(frame_idx):
-        xs, ys, vxs, vys, rs = frames[frame_idx]
+        xs, ys, vxs, vys, rs, contacts = frames[frame_idx]
 
         for i, c in enumerate(patches):
             c.center = (xs[i], ys[i])
             c.set_radius(rs[i])
+            if contacts[i]:
+                c.set_edgecolor(contact_edge)
+                c.set_facecolor(contact_face)
+            else:
+                c.set_edgecolor(base_edge_colors[i])
+                c.set_facecolor(base_face_colors[i])
 
         vxs_s = [vx * vel_scale for vx in vxs]
         vys_s = [vy * vel_scale for vy in vys]

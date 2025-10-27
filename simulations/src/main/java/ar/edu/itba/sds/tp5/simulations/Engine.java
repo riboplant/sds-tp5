@@ -58,8 +58,9 @@ public class Engine {
                         final double vx = (velocity != null) ? velocity.x() : 0.0;
                         final double vy = (velocity != null) ? velocity.y() : 0.0;
                         final double radius = p.getR();
-                        writer.write(String.format(Locale.US, "%.12f %.12f %.12f %.12f %.12f",
-                                x, y, vx, vy, radius));
+                        final int touchedCentral = p.hasTouchedCentral() ? 1 : 0;
+                        writer.write(String.format(Locale.US, "%.12f %.12f %.12f %.12f %.12f %d",
+                                x, y, vx, vy, radius, touchedCentral));
                         writer.newLine();
                     }
                 }

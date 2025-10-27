@@ -25,27 +25,24 @@ public class Particle {
     private static final double FIXED_TARGET_BUFFER = 0.05;
     private static final int MAX_TARGET_SAMPLING_ATTEMPTS = 1_000;
     private double r;
-    private double prevR;
     private MathVector velocity;
     private MathVector position;
-    private MathVector prevPosition;
-    private MathVector target;
-    private boolean arrived = false;
+    private MathVector directionToTarget;
     private boolean crossedBoundarySinceLastQuery = false;
+    private boolean hasTouchedCentral = false;
 
     public Particle(double rMin, double rMax, double v, double L) {
         this.rMin = rMin;
         this.rMax = rMax;
         this.id = idCounter++;
         this.r = rMin;
-        this.prevR = r;
         this.L = L;
         final double angle = RANDOM.nextDouble() * 2 * Math.PI;
         this.velocity = MathVector.ofPolar(v, angle);
         this.vDesiredMax = v;
         this.position = new MathVector(RANDOM.nextDouble() * L, RANDOM.nextDouble() * L);
-        this.prevPosition = this.position;
-        this.target = new MathVector(RANDOM.nextDouble() * L, RANDOM.nextDouble() * L);
+        final double directionAngle = RANDOM.nextDouble() * 2 * Math.PI;
+        this.directionToTarget = MathVector.ofPolar(1.0, directionAngle);
         isFixed = false;
     }
 
@@ -56,30 +53,13 @@ public class Particle {
         this.vDesiredMax = 0.0;
         this.velocity = MathVector.ZERO;
         this.id = idCounter++;
-        this.prevR = rDefault;
         this.position = new MathVector(L / 2.0, L / 2.0);
         this.r = rDefault;
         this.L = L;
         registerFixedObstacle(this.position, this.r);
     }
 
-    //@TODO: borrar, es de prueba
-    public Particle(double x, double y, double tx, double ty, double rMin, double rMax, double v, double L) {
-        this.rMin = rMin;
-        this.rMax = rMax;
-        this.id = idCounter++;
-        this.r = rMin + (rMax - rMin) * RANDOM.nextDouble();
-        this.prevR = r;
-        this.vDesiredMax = v;
-        this.position = new MathVector(x, y);
-        this.prevPosition = this.position;
-        this.target = new MathVector(tx, ty);
-        this.L = L;
-        this.velocity = initVelocity();
-        isFixed = false;
-    }
-
-    private MathVector initVelocity() {
+    /*private MathVector initVelocity() {
         MathVector et = this.directionToTarget();
         if (et != null && et.length() >= EPS) {
             et = et.normalize();
@@ -87,16 +67,14 @@ public class Particle {
         } else {
             return new MathVector(0.0, 0.0);
         }
-    }
+    }*/
 
     public void updateRadius(boolean isCollision, double dt) {
         if(isFixed) return;
         if (isCollision) {
             this.r = this.rMin;
-            this.prevR = this.rMin;
         } else {
             this.r = Math.min(this.r + this.rMax*(dt/TAU), this.rMax);
-            this.prevR = this.r;
         }
     }
 
@@ -137,7 +115,7 @@ public class Particle {
         this.position = wrapped;
 
         // Update target if it has been reached
-        double d = MathVector.minImage(this.position, this.target, this.L).length();
+        /*double d = MathVector.minImage(this.position, this.target, this.L).length();
         if (!arrived && d <= EPS_IN) {
             MathVector nt = null;
             int tries = 0;
@@ -165,17 +143,17 @@ public class Particle {
 
         } else if (arrived && d >= EPS_OUT) {
             this.arrived = false;
-        }
+        }*/
     }
 
-    public MathVector directionToTarget() {
+    /*public MathVector directionToTarget() {
         if (target == null) return MathVector.ZERO;
         MathVector delta = MathVector.minImage(position, target, this.L);
         if (delta.length() < EPS) {
             return MathVector.ZERO;
         }
         return delta;
-    }
+    }*/
 
     public double getRMin() {
         return rMin;
@@ -209,6 +187,14 @@ public class Particle {
         boolean crossed = crossedBoundarySinceLastQuery;
         crossedBoundarySinceLastQuery = false;
         return crossed;
+    }
+
+    public boolean hasTouchedCentral() {
+        return hasTouchedCentral;
+    }
+
+    public void setHasTouchedCentral(boolean hasTouchedCentral) {
+        this.hasTouchedCentral = hasTouchedCentral;
     }
 
     private static void registerFixedObstacle(MathVector center, double radius) {
@@ -274,5 +260,9 @@ public class Particle {
             }
         }
         return adjusted;
+    }
+
+    public MathVector getDirectionToTarget() {
+        return directionToTarget;
     }
 }
