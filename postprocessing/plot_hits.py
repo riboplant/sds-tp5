@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot cumulative central-particle hits vs time for one or more simulations."""
+"""Plot cumulative central-particle hits vs time averaging over triplicate runs."""
 
 from __future__ import annotations
 
@@ -88,24 +88,58 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[List[float], List[int
     return times, hits
 
 
+def load_simulation(sim_dir: Path) -> Tuple[List[float], List[int], float, int]:
+    """Return time series plus metadata for a single simulation run."""
+    L, states, r_min, r_max, declared_N = read_static(sim_dir)
+    phi = packing_fraction(L, states, r_min, r_max)
+    times, hits = read_hits(sim_dir, len(states))
+    return times, hits, phi, declared_N
+
+
 def plot_hits(sim_names: List[str]) -> None:
     import matplotlib.pyplot as plt
 
     for sim_name in sim_names:
-        sim_dir = SIM_BASE / sim_name
-        if not sim_dir.exists():
-            raise FileNotFoundError(f"Simulation directory not found: {sim_dir}")
+        replicate_names = [f"{sim_name}_{i}" for i in range(1, 4)]
+        replicate_times: List[List[float]] = []
+        replicate_hits: List[List[int]] = []
+        phis: List[float] = []
+        population_sizes: List[int] = []
 
-        L, states, r_min, r_max, declared_N = read_static(sim_dir)
-        phi = packing_fraction(L, states, r_min, r_max)
-        times, hits = read_hits(sim_dir, len(states))
+        for replicate in replicate_names:
+            sim_dir = SIM_BASE / replicate
+            if not sim_dir.exists():
+                raise FileNotFoundError(f"Simulation directory not found: {sim_dir}")
 
-        label = f"N={declared_N} - φ={phi:.4f}"
-        plt.plot(times, hits, label=label)
+            times, hits, phi, declared_N = load_simulation(sim_dir)
+            replicate_times.append(times)
+            replicate_hits.append(hits)
+            phis.append(phi)
+            population_sizes.append(declared_N)
 
-    plt.xlabel("Time [s]")
-    plt.ylabel("Central hits (cumulative)")
-    plt.title("Central particle hits vs time")
+        reference_times = replicate_times[0]
+        for other_times, replicate in zip(replicate_times[1:], replicate_names[1:]):
+            if len(other_times) != len(reference_times) or not all(
+                math.isclose(t_ref, t_other, rel_tol=1e-9, abs_tol=1e-9)
+                for t_ref, t_other in zip(reference_times, other_times)
+            ):
+                raise ValueError(
+                    "All replicates must share identical timestamps. "
+                    f"Mismatch found between '{replicate_names[0]}' and '{replicate}'."
+                )
+
+        averaged_hits = [sum(values) / len(values) for values in zip(*replicate_hits)]
+        if len(set(population_sizes)) != 1:
+            raise ValueError(
+                f"Expected identical particle counts across replicates for '{sim_name}', got {population_sizes}."
+            )
+        averaged_phi = sum(phis) / len(phis)
+        label = f"N={population_sizes[0]} - φ={averaged_phi:.4f}"
+
+        plt.plot(reference_times, averaged_hits, label=label)
+
+    plt.xlabel("Tiempo [s]", fontsize=12)
+    plt.ylabel("Golpes al centro (promedio acumulado)", fontsize=12)
     plt.legend()
     plt.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
     plt.tight_layout()
@@ -114,12 +148,12 @@ def plot_hits(sim_names: List[str]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Plot cumulative central-particle hits versus time for one or more simulations."
+        description="Plot cumulative central-particle hits versus time, averaging three replicates per simulation."
     )
     parser.add_argument(
         "simulations",
         nargs="+",
-        help="Simulation folder names under data/simulations (e.g. test1 test2 ...)",
+        help="Base simulation names; each expects sub-runs '<name>_1', '<name>_2', '<name>_3' under data/simulations",
     )
     args = parser.parse_args()
     plot_hits(args.simulations)

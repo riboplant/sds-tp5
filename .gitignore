@@ -392,5 +392,6 @@ $RECYCLE.BIN/
 .idea/
 
 data
+.venv
 
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains,java,python,windows,linux,macos
