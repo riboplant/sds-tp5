@@ -3,7 +3,7 @@
 """Q vs φ a partir de CURVAS PROMEDIO DE HITS por base: todas las marcas con el mismo color y barras de error.
 
 Uso:
-    python3 postprocessing/q_vs_phi.py test10_600 test20_600 test30_600 ... [--t0 20] [--out data/graphics/hits]
+    python3 postprocessing/q_vs_phi.py test10_600 test20_600 test30_600 ... [--tmark 20] [--out data/graphics/hits]
 Cada nombre base espera tres réplicas: <base>_1, <base>_2, <base>_3 bajo data/simulations/.
 """
 
@@ -152,8 +152,8 @@ def scan_b_and_minimize(t: np.ndarray, y: np.ndarray, ngrid: int = 801) -> Tuple
 
 
 # ---------- Q (pendiente) por base con replicación ----------
-def q_phi_for_base(base_name: str, t0: float) -> Tuple[float, float, float, float]:
-    """Para una base: computa Q=b* por réplica (t>=t0), devuelve
+def q_phi_for_base(base_name: str, tmark: float) -> Tuple[float, float, float, float]:
+    """Para una base: computa Q=b* por réplica (t>=tmark), devuelve
        (phi_mean, phi_std, Q_mean, Q_std). Espera réplicas base_1..base_3."""
     replicas = [f"{base_name}_{i}" for i in range(1, 4)]
     phis: List[float] = []
@@ -171,9 +171,9 @@ def q_phi_for_base(base_name: str, t0: float) -> Tuple[float, float, float, floa
             if len(t) != len(ref_t) or not np.allclose(t, ref_t, rtol=1e-9, atol=1e-9):
                 raise ValueError(f"Las réplicas de '{base_name}' no comparten los mismos timestamps (ver {rep}).")
 
-        m = t >= t0
+        m = t >= tmark
         if not np.any(m):
-            raise ValueError(f"No hay datos con t >= {t0} en {rep}")
+            raise ValueError(f"No hay datos con t >= {tmark} en {rep}")
         t_win = t[m]
         y_win = h[m]
         b_star, _, _ = scan_b_and_minimize(t_win, y_win)
@@ -197,10 +197,10 @@ def main():
         help="Nombres base; se esperan réplicas '<name>_1', '_2', '_3' en data/simulations/",
     )
     ap.add_argument(
-        "--t0",
+        "--tmark",
         type=float,
         default=20.0,
-        help="Inicio de la ventana temporal para el ajuste lineal (default 20 s).",
+        help="Tiempo a partir del cual se considera el estacionario para el ajuste lineal (default 20 s).",
     )
     ap.add_argument(
         "--out",
@@ -214,7 +214,7 @@ def main():
     # Recolectar puntos (phi_mean, phi_std, Q_mean, Q_std) por base
     x_phi_mean, x_phi_err, y_q_mean, y_q_err = [], [], [], []
     for base in args.simulations:
-        phi_mean, phi_std, q_mean, q_std = q_phi_for_base(base, args.t0)
+        phi_mean, phi_std, q_mean, q_std = q_phi_for_base(base, args.tmark)
         x_phi_mean.append(phi_mean)
         x_phi_err.append(phi_std if phi_std > 0 else 0.0)
         y_q_mean.append(q_mean)

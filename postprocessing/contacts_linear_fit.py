@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Ajuste lineal sobre curvas PROMEDIO de hits: (A) Error vs b y (B) rectas de ajuste (t>=t0)."""
 
 from __future__ import annotations
@@ -99,7 +100,7 @@ def load_run(sim_dir: Path) -> Tuple[np.ndarray, np.ndarray, float, int]:
             f"static.txt declara N={declared_N} pero solo hay {states_N} estados en {sim_dir/'static.txt'}."
         )
 
-    # φ: mantené tu definición actual si querés (solo r_min y N declarado)
+    # φ: mantené tu definición actual (solo r_min y N declarado)
     phi = packing_fraction(L, r_min, declared_N)
 
     # Lectura de dinámico: EXACTAMENTE len(states) líneas por frame (incluida la central)
@@ -172,7 +173,8 @@ def average_hits_of_base(base_name: str) -> Tuple[np.ndarray, np.ndarray, float,
 def main():
     ap = argparse.ArgumentParser(description="Error vs b y líneas de ajuste sobre CURVAS PROMEDIO de hits (t>=t0).")
     ap.add_argument("simulations", nargs="+", help="Nombres base; se esperan réplicas '<name>_1', '_2', '_3' en data/simulations/")
-    ap.add_argument("--t0", type=float, default=20.0, help="Inicio de ventana temporal para ajuste lineal (default 20 s).")
+    ap.add_argument("--t0", type=float, default=20.0, help="Inicio de ventana temporal para la línea vertical y etiqueta (gráfico).")
+    ap.add_argument("--tmark", type=float, default=20.0, help="Inicio del estacionario para el ajuste (cálculo).")
     ap.add_argument("--out", type=Path, default=REPO_ROOT / "data" / "graphics" / "hits", help="Carpeta de salida de gráficos.")
     args = ap.parse_args()
 
@@ -194,7 +196,8 @@ def main():
     plt.figure(figsize=(9.2, 5.2))
     grids = []
     for label, t, y, _, N in curves:
-        mask = t >= args.t0
+        # *** ÚNICO CAMBIO: usar tmark para el estacionario ***
+        mask = t >= args.tmark
         t_win = t[mask]
         y_win = y[mask]
         b_star, a_star, sse_star, b_grid, sse_grid = scan_b_and_minimize(t_win, y_win)
@@ -248,17 +251,18 @@ def main():
     # ---------- (B) Rectas de ajuste sobre cada curva promedio ----------
     plt.figure(figsize=(9.2, 5.2))
     ax = plt.gca()
-    plt.axvline(args.t0, linestyle="--", color="0.4", lw=1)
+    plt.axvline(args.tmark, linestyle="--", color="0.4", lw=1)
 
     for label, t, y, _, N in curves:
-        mask = t >= args.t0
+        # *** ÚNICO CAMBIO: usar tmark para el estacionario ***
+        mask = t >= args.tmark
         t_win = t[mask]
         y_win = y[mask]
         b_star, a_star, sse_star, _, _ = scan_b_and_minimize(t_win, y_win)
         color = color_of[N]
         # curva original (suave)
         plt.plot(t, y, lw=1.2, alpha=0.30, color=color)
-        # recta ajustada en la ventana
+        # recta ajustada en la ventana (definida por tmark)
         y_fit = a_star + b_star * t_win
         plt.plot(t_win, y_fit, lw=2.5, color=color, label=f"{label}")
 
@@ -269,8 +273,8 @@ def main():
 
     y_top = ax.get_ylim()[1]
     ax.annotate(
-        f"t = {args.t0:g} s",
-        xy=(args.t0, y_top), xycoords="data",
+        f"t = {args.tmark:g} s",
+        xy=(args.tmark, y_top), xycoords="data",
         xytext=(0, -20), textcoords="offset points",
         ha="center", va="top",
         fontsize=14,

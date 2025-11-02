@@ -18,7 +18,6 @@ SIM_BASE = REPO_ROOT / "data" / "simulations"
 OUT_DIR = REPO_ROOT / "data" / "graphics"
 
 # ---- Marca vertical fija (sin pasar por parámetro) ----
-T_MARK = 20.0  # segundos
 
 
 def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
@@ -107,7 +106,7 @@ def load_simulation(sim_dir: Path) -> Tuple[List[float], List[int], float, int]:
     return times, hits, phi, declared_N
 
 
-def plot_hits(sim_names: List[str]) -> None:
+def plot_hits(sim_names: List[str], t_mark: float = 20.0) -> None:
     # almacenamos las series para re-usarlas en el inset
     series = []  # (times: np.ndarray, hits: np.ndarray, color: str, label: str)
 
@@ -190,14 +189,14 @@ def plot_hits(sim_names: List[str]) -> None:
         mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.4", lw=1.0)
     except Exception:
         pass
-
-    # ----- Línea vertical punteada y etiqueta en t = T_MARK -----
+        
+    # ----- Línea vertical punteada y etiqueta en t = t_mark -----
     # (hacemos esto tras ajustar límites del inset para tener el ylim real del eje principal)
-    ax.axvline(T_MARK, linestyle="--", color="0.25", lw=1.2, dashes=(4, 3))
+    ax.axvline(t_mark, linestyle="--", color="0.25", lw=1.2, dashes=(4, 3))
     y_top = ax.get_ylim()[1]
     ax.annotate(
-        f"t = {T_MARK:g} s",
-        xy=(T_MARK, y_top),
+        f"t = {t_mark:g} s",
+        xy=(t_mark, y_top),
         xytext=(0, -20),           # 6 px por encima del borde superior
         textcoords="offset points",
         ha="center", va="bottom",
@@ -208,8 +207,8 @@ def plot_hits(sim_names: List[str]) -> None:
 
     # Si T_MARK cae dentro de la ventana del inset, dibujamos la línea también allí
     x0_in, x1_in = axins.get_xlim()
-    if x0_in <= T_MARK <= x1_in:
-        axins.axvline(T_MARK, linestyle="--", color="0.25", lw=1.0, dashes=(4, 3))
+    if x0_in <= t_mark <= x1_in:
+        axins.axvline(t_mark, linestyle="--", color="0.25", lw=1.0, dashes=(4, 3))
 
     # ----- Etiquetas y guardado (en el eje principal) -----
     ax.set_xlabel("Tiempo (s)", fontsize=14)
@@ -245,8 +244,14 @@ def main() -> None:
         nargs="+",
         help="Base simulation names; each expects sub-runs '<name>_1', '<name>_2', '<name>_3' under data/simulations",
     )
+    parser.add_argument(
+        "--tmark",
+        type=float,
+        default=20.0,
+        help="Tiempo (s) donde dibujar la línea vertical punteada (default: 20).",
+    )
     args = parser.parse_args()
-    plot_hits(args.simulations)
+    plot_hits(args.simulations, t_mark=args.tmark)
 
 
 if __name__ == "__main__":
