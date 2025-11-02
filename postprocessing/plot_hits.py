@@ -44,13 +44,17 @@ def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
     return L, states, r_min, r_max, declared_N
 
 
-def packing_fraction(L: float, states: Iterable[str], r_min: float, r_max: float) -> float:
-    """Compute φ = Σ π r_i^2 / L², assuming fixed particles use r_max and moving ones r_min."""
+def packing_fraction(L: float, states: Iterable[str], r_min: float, declared_N: int,
+                     central_is_obstacle: bool = False, central_radius: float | None = None) -> float:
+    """ϕ física: suma de discos impenetrables sobre el área del dominio."""
     area = 0.0
-    moving_radius = 0.5 * (r_min + r_max)
-    for s in states:
-        radius = r_max if s == "F" else moving_radius
-        area += math.pi * radius * radius
+    # Usa exactamente N estados (por si el archivo trae líneas extra).
+    for i, _ in enumerate(states[:declared_N]):
+        if central_is_obstacle and i == 0:
+            r = central_radius if central_radius is not None else r_min
+        else:
+            r = r_min
+        area += math.pi * r * r
     return area / (L * L)
 
 
@@ -98,7 +102,7 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[List[float], List[int
 def load_simulation(sim_dir: Path) -> Tuple[List[float], List[int], float, int]:
     """Return time series plus metadata for a single simulation run."""
     L, states, r_min, r_max, declared_N = read_static(sim_dir)
-    phi = packing_fraction(L, states, r_min, r_max)
+    phi = packing_fraction(L, states, r_min, declared_N, central_is_obstacle=False)
     times, hits = read_hits(sim_dir, len(states))
     return times, hits, phi, declared_N
 
@@ -211,7 +215,17 @@ def plot_hits(sim_names: List[str]) -> None:
     ax.set_xlabel("Tiempo (s)", fontsize=14)
     ax.set_ylabel("Contactos Únicos", fontsize=14)
     ax.tick_params(axis='both', labelsize=14)
-    ax.legend(fontsize=14)  # leyenda como antes
+    #ax.legend(fontsize=14)  # leyenda como antes
+    leg = ax.legend(
+        loc="upper right",            # arriba a la derecha
+        bbox_to_anchor=(0.98, 0.98),  # un pelín hacia adentro del borde
+        bbox_transform=ax.transAxes,  # fijo al eje (no a los datos)
+        fontsize=14,
+        frameon=True,
+    )
+    leg.get_frame().set_facecolor("white")
+    leg.get_frame().set_alpha(0.9)
+
     ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
     fig.tight_layout()
 

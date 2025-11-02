@@ -36,15 +36,14 @@ def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
         raise ValueError(
             f"static declares N={declared_N} but only {len(states)} particle states were provided in {static_path}"
         )
+    # Nota: si hay más estados que N, luego usaremos exactamente declared_N.
     return L, states, r_min, r_max, declared_N
 
 
-def packing_fraction(L: float, states: List[str], r_min: float, r_max: float) -> float:
-    area = 0.0
-    moving_radius = 0.5 * (r_min + r_max)  # misma convención que plot_hits.py
-    for s in states:
-        radius = r_max if s == "F" else moving_radius
-        area += math.pi * radius * radius
+# ---------- ϕ física SOLO con radios impenetrables ----------
+def packing_fraction(L: float, r_min: float, declared_N: int) -> float:
+    """ϕ = (N * π r_min^2) / L^2 usando exactamente N discos impenetrables."""
+    area = declared_N * math.pi * (r_min * r_min)
     return area / (L * L)
 
 
@@ -73,7 +72,7 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[List[float], List[int
             times.append(time_value)
             hits.append(hit_value)
 
-            # Leer N líneas de partículas y validar columnas
+            # Leer EXACTAMENTE N líneas de partículas y validar columnas
             for _ in range(particle_count):
                 data_line = f.readline()
                 if not data_line:
@@ -92,8 +91,20 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[List[float], List[int
 
 def load_run(sim_dir: Path) -> Tuple[np.ndarray, np.ndarray, float, int]:
     L, states, r_min, r_max, declared_N = read_static(sim_dir)
-    phi = packing_fraction(L, states, r_min, r_max)
-    t, h = read_hits(sim_dir, len(states))
+
+    # Usar la cantidad REAL de líneas F/M para leer el dynamic.txt
+    states_N = len(states)
+    if states_N < declared_N:
+        raise ValueError(
+            f"static.txt declara N={declared_N} pero solo hay {states_N} estados en {sim_dir/'static.txt'}."
+        )
+
+    # φ: mantené tu definición actual si querés (solo r_min y N declarado)
+    phi = packing_fraction(L, r_min, declared_N)
+
+    # Lectura de dinámico: EXACTAMENTE len(states) líneas por frame (incluida la central)
+    t, h = read_hits(sim_dir, states_N)
+
     return np.asarray(t, dtype=float), np.asarray(h, dtype=float), phi, declared_N
 
 # ---------- Helpers de ajuste (inspirado en galaxy_linear_fit.py) ----------
@@ -161,7 +172,7 @@ def average_hits_of_base(base_name: str) -> Tuple[np.ndarray, np.ndarray, float,
 def main():
     ap = argparse.ArgumentParser(description="Error vs b y líneas de ajuste sobre CURVAS PROMEDIO de hits (t>=t0).")
     ap.add_argument("simulations", nargs="+", help="Nombres base; se esperan réplicas '<name>_1', '_2', '_3' en data/simulations/")
-    ap.add_argument("--t0", type=float, default=20.0, help="Inicio de ventana temporal para ajuste lineal (default 10 s).")
+    ap.add_argument("--t0", type=float, default=20.0, help="Inicio de ventana temporal para ajuste lineal (default 20 s).")
     ap.add_argument("--out", type=Path, default=REPO_ROOT / "data" / "graphics" / "hits", help="Carpeta de salida de gráficos.")
     args = ap.parse_args()
 
@@ -193,7 +204,7 @@ def main():
         plt.scatter([b_grid[i_min]], [sse_grid[i_min]], s=26, color=color, zorder=3)
         grids.append((label, b_grid, sse_grid, b_star, a_star))
 
-    plt.xlabel(r"$b$", fontsize=14)
+    plt.xlabel(r"$Q$ (1/s)", fontsize=14)
     plt.ylabel("Error", fontsize=14)
     plt.tick_params(axis='both', labelsize=14)
     plt.legend(ncol=1, frameon=True, fontsize=14)
@@ -228,7 +239,7 @@ def main():
         ax.set_ylim(y_min - 0.15 * span, y_p95 + 0.1 * span)
 
     plt.tight_layout()
-    f1 = args.out / "error_vs_b.png"
+    f1 = args.out / "error_vs_q.png"
     plt.savefig(f1, dpi=160)
     plt.show()
     plt.close()

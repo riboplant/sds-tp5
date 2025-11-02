@@ -21,7 +21,7 @@ THIS_FILE = Path(__file__).resolve()
 REPO_ROOT = THIS_FILE.parent.parent
 SIM_BASE = REPO_ROOT / "data" / "simulations"
 
-# ---------- Lectura idéntica a plot_hits.py ----------
+# ---------- Lectura de estático ----------
 def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
     static_path = sim_dir / "static.txt"
     if not static_path.exists():
@@ -42,19 +42,22 @@ def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
         raise ValueError(
             f"static declares N={declared_N} but only {len(states)} particle states were provided in {static_path}"
         )
+    # Si hay más estados que N, ignoraremos los extra solo para chequeo; para lectura usamos len(states).
     return L, states, r_min, r_max, declared_N
 
 
-def packing_fraction(L: float, states: List[str], r_min: float, r_max: float) -> float:
-    """φ = Σ π r_i^2 / L²; para móviles uso radio medio (r_min+r_max)/2 como en plot_hits.py."""
-    area = 0.0
-    moving_radius = 0.5 * (r_min + r_max)
-    for s in states:
-        radius = r_max if s == "F" else moving_radius
-        area += math.pi * radius * radius
+# ---------- ϕ física: solo partículas móviles (excluye la fija) ----------
+def packing_fraction_excluding_central(L: float, r_min: float, states_count: int) -> float:
+    """
+    ϕ = ((states_count - 1) * π r_min^2) / L^2
+    Excluye una partícula (la central/fija) y usa radio impenetrable r_min para las móviles.
+    """
+    mobile_n = max(states_count - 1, 0)
+    area = mobile_n * math.pi * (r_min * r_min)
     return area / (L * L)
 
 
+# ---------- Lectura de dinámico (exactamente len(states) por frame) ----------
 def read_hits(sim_dir: Path, particle_count: int) -> Tuple[np.ndarray, np.ndarray]:
     dynamic_path = sim_dir / "dynamic.txt"
     if not dynamic_path.exists():
@@ -80,7 +83,7 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[np.ndarray, np.ndarra
             times.append(time_value)
             hits.append(hit_value)
 
-            # leer N líneas de partículas y validar columnas
+            # Leer EXACTAMENTE 'particle_count' líneas de partículas
             for _ in range(particle_count):
                 data_line = f.readline()
                 if not data_line:
@@ -98,11 +101,26 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[np.ndarray, np.ndarra
 
 
 def load_run(sim_dir: Path) -> Tuple[np.ndarray, np.ndarray, float]:
-    """t, h, φ para una sola ejecución (una réplica)."""
-    L, states, r_min, r_max, _ = read_static(sim_dir)
-    phi = packing_fraction(L, states, r_min, r_max)
-    t, h = read_hits(sim_dir, len(states))
+    """
+    t, h, φ para una sola ejecución (una réplica).
+    - Lectura como plot_hits: consume EXACTAMENTE len(states) por frame (incluye la fija).
+    - φ excluye la central y usa r_min para móviles.
+    """
+    L, states, r_min, r_max, declared_N = read_static(sim_dir)
+
+    states_N = len(states)               # cantidad REAL de líneas F/M
+    if states_N < declared_N:
+        raise ValueError(
+            f"static.txt declara N={declared_N} pero solo hay {states_N} estados en {sim_dir/'static.txt'}."
+        )
+    # φ sin la central:
+    phi = packing_fraction_excluding_central(L, r_min, states_N)
+
+    # Lectura dinámica: EXACTAMENTE len(states) líneas por frame (para no desfasar)
+    t, h = read_hits(sim_dir, states_N)
+
     return t, h, phi
+
 
 # ---------- Ajuste lineal y barrido en b ----------
 def sse_given_b(t: np.ndarray, y: np.ndarray, b: float) -> Tuple[float, float]:
@@ -131,6 +149,7 @@ def scan_b_and_minimize(t: np.ndarray, y: np.ndarray, ngrid: int = 801) -> Tuple
 
     i_min = int(np.argmin(sse_grid))
     return float(b_grid[i_min]), float(a_grid[i_min]), float(sse_grid[i_min])
+
 
 # ---------- Q (pendiente) por base con replicación ----------
 def q_phi_for_base(base_name: str, t0: float) -> Tuple[float, float, float, float]:
@@ -163,7 +182,6 @@ def q_phi_for_base(base_name: str, t0: float) -> Tuple[float, float, float, floa
 
     phi_mean = float(np.mean(phis))
     q_mean = float(np.mean(qs))
-    # desvío estándar muestral (ddof=1) si hay >1 réplica
     phi_std = float(np.std(phis, ddof=1)) if len(phis) > 1 else 0.0
     q_std = float(np.std(qs, ddof=1)) if len(qs) > 1 else 0.0
     return phi_mean, phi_std, q_mean, q_std
@@ -209,7 +227,6 @@ def main():
 
     # --- Plot Q vs φ (mismo color para todos) ---
     plt.figure(figsize=(7.6, 5.2))
-    # si no hay variación en φ, matplotlib ignora xerr=0; lo mismo para yerr
     plt.errorbar(
         x_phi_mean, y_q_mean,
         xerr=x_phi_err if np.any(x_phi_err > 0) else None,
@@ -218,13 +235,13 @@ def main():
         color="C0", ecolor="C0", mec="C0", mfc="white",
         zorder=3,
     )
-    order = np.argsort(x_phi_mean)  # ordena por φ ascendente
+    order = np.argsort(x_phi_mean)
     x_line = x_phi_mean[order]
     y_line = y_q_mean[order]
     plt.plot(x_line, y_line, '-', lw=1.8, color="C0", alpha=0.9, zorder=2)
 
-    plt.xlabel(r"Fracción de empaque $\phi$", fontsize=14)
-    plt.ylabel(r"$Q$  [contactos/s]", fontsize=14)
+    plt.xlabel(r"$\phi$", fontsize=14)
+    plt.ylabel(r"$Q$ (1/s)", fontsize=14)
     plt.tick_params(axis="both", labelsize=14)
     plt.grid(True, linestyle="--", linewidth=0.6, alpha=0.6)
     plt.tight_layout()
