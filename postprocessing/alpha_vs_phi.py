@@ -36,6 +36,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import powerlaw
 
+# --- Fuente global 14pt ---
+plt.rcParams.update({
+    "font.size": 14,
+    "axes.titlesize": 14,
+    "axes.labelsize": 14,
+    "xtick.labelsize": 14,
+    "ytick.labelsize": 14,
+    "legend.fontsize": 14,
+    "figure.titlesize": 14,
+})
+
 # ---- Config ----
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SIM_BASE = REPO_ROOT / "data" / "simulations"
@@ -147,7 +158,7 @@ def taus_from_times(times: np.ndarray) -> np.ndarray:
 
 
 def interleave_round_robin(arrs: Sequence[np.ndarray]) -> np.ndarray:
-    """[a0,a1,...],[b0,...],[c0,...] -> [a0,b0,c0,a1,b1,c1,...] (ignora vacíos)."""
+    """[a0,a1,...],[b0,...],[c0,...] -> [a0,b0,c1,a1,b1,c1,...] (ignora vacíos)."""
     max_len = max((len(a) for a in arrs), default=0)
     out: List[float] = []
     for i in range(max_len):
@@ -185,7 +196,6 @@ def fit_powerlaw_distribution(data: np.ndarray) -> tuple[float, float, float, fl
         else:
             ks = float(ks_result)
     except TypeError:
-        # versiones antiguas usan "normalized" y retornan solo KS
         ks = float(fit.power_law.KS())
     except Exception as exc:
         print(f"[powerlaw] Error obteniendo KS: {exc}")
@@ -276,15 +286,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     results.sort(key=lambda r: r.phi)
 
+    # ---- Figura α vs φ ----
     fig, ax = plt.subplots(figsize=(6.4, 4.2), constrained_layout=True)
     x = [r.phi for r in results]
     y = [r.alpha for r in results]
     yerr = [r.sigma_alpha for r in results]
     ax.errorbar(x, y, yerr=yerr, fmt="o-", capsize=4, lw=1.5, ms=5)
-    ax.set_xlabel(r"$\phi$", fontsize=12)
-    ax.set_ylabel(r"$\alpha$", fontsize=12)
+    ax.set_xlabel(r"$\phi$", fontsize=14)
+    ax.set_ylabel(r"$\alpha$", fontsize=14)
+    ax.tick_params(axis="both", labelsize=14)
     ax.grid(True, alpha=0.3)
 
+    # ---- Figura CCDF log–log ----
     fig_log, ax_log = plt.subplots(figsize=(6.4, 4.2), constrained_layout=True)
     plotted_any = False
     for r in results:
@@ -296,7 +309,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         tau_sorted = np.sort(tau)
         ccdf = np.arange(tau_sorted.size, 0, -1) / tau_sorted.size
         label_main = f"φ={r.phi:.3f}"
-        line = ax_log.plot(tau_sorted, ccdf, "-", linewidth=1.2, label=label_main)[0]
+        line = ax_log.plot(tau_sorted, ccdf, "--", linewidth=1.2, label=label_main)[0]
         color = line.get_color()
         if np.isfinite(r.xmin) and np.isfinite(r.alpha) and r.alpha > 1.0:
             xmin_fit = float(r.xmin)
@@ -306,19 +319,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 x_fit = np.geomspace(xmin_fit, xmax_fit, 200)
                 tail_fraction = tau_tail.size / tau_sorted.size
                 y_fit = tail_fraction * np.power(x_fit / xmin_fit, 1.0 - r.alpha)
-                ax_log.plot(x_fit, y_fit, color=color, linewidth=1.0, linestyle="--", alpha=0.8)
+                ax_log.plot(x_fit, y_fit, color=color, linewidth=1.0, linestyle="-", alpha=0.8)
         plotted_any = True
     if plotted_any:
         ax_log.set_xscale("log")
         ax_log.set_yscale("log")
-        ax_log.set_xlabel(r"$\tau$", fontsize=12)
-        ax_log.set_ylabel(r"$P(x \geq x_{\mathrm{min}})$", fontsize=12)
+        ax_log.set_xlabel(r"$\tau$ (s)", fontsize=14)
+        ax_log.set_ylabel(r"$P(\tau \geq \tau_{\mathrm{min}})$", fontsize=14)
+        ax_log.tick_params(axis="both", labelsize=14)
         ax_log.grid(True, alpha=0.3)
-        ax_log.legend(title="Grupo", fontsize=9)
+        ax_log.legend(fontsize=14)
     else:
         plt.close(fig_log)
 
-    # Figura p-valor vs phi
+    # ---- Figura p-valor vs φ ----
     finite_results = [r for r in results if np.isfinite(r.p_value)]
     if finite_results:
         fig_p, ax_p = plt.subplots(figsize=(6.4, 4.2), constrained_layout=True)
@@ -326,10 +340,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         y_p = [r.p_value for r in finite_results]
         ax_p.plot(x_p, y_p, "o-", lw=1.5, ms=5)
         ax_p.axhline(0.1, linestyle="--", color="gray", linewidth=1)
-        ax_p.set_xlabel(r"$\phi$", fontsize=12)
-        ax_p.set_ylabel("p-valor", fontsize=12)
+        ax_p.set_xlabel(r"$\phi$", fontsize=14)
+        ax_p.set_ylabel("p-valor", fontsize=14)
+        ax_p.tick_params(axis="both", labelsize=14)
         ax_p.grid(True, alpha=0.3)
 
+    # ---- Guardado ----
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = GRAPH_BASE / f"alpha_vs_phi_{ts}.png"
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -345,6 +361,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         out_path_p = GRAPH_BASE / f"p-value_vs_phi_{ts}.png"
         fig_p.savefig(out_path_p, dpi=200)
         print(f"Figura guardada en: {out_path_p}")
+
+    plt.show()
 
     return 0
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 from pathlib import Path
 import sys
@@ -53,7 +54,7 @@ def read_dynamic(dynamic_path: Path, count: int):
                     continue
                 t = float(parts[0])
                 if len(parts) > 1:
-                    _total_hits = int(parts[1])
+                    _total_hits = int(float(parts[1]))
             except ValueError as e:
                 raise ValueError(f"Expected a time value (and optional total contact count), got '{t_line}'") from e
 
@@ -169,52 +170,68 @@ def make_animation(L, r_min, r_max, times, frames, slow_factor: float, states):
     return fig, ani
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--sim', required=True, help='Simulation name (folder under data/simulations)')
-    parser.add_argument('--slow', type=float, default=1.0, help='Factor para ralentizar la animación (2.0 = 2x más lenta)')
-    args = parser.parse_args()
-
-    sim_dir = BASE_PATH / args.sim
+def render_one(sim_name: str, slow: float) -> None:
+    sim_dir = BASE_PATH / sim_name
     static_path = sim_dir / 'static.txt'
     dynamic_path = sim_dir / 'dynamic.txt'
 
     if not static_path.exists():
         print(f"ERROR: static file not found: {static_path}", file=sys.stderr)
-        sys.exit(1)
+        return
     if not dynamic_path.exists():
         print(f"ERROR: dynamic file not found: {dynamic_path}", file=sys.stderr)
-        sys.exit(1)
+        return
 
     L, N, r_min, r_max, states = read_static(static_path)
     total_particles = len(states)
     times, frames = read_dynamic(dynamic_path, total_particles)
 
     if len(frames) == 0:
-        print("No frames found in dynamic.txt. Nothing to animate.", file=sys.stderr)
-        sys.exit(1)
+        print(f"[{sim_name}] No frames found in dynamic.txt. Nothing to animate.", file=sys.stderr)
+        return
 
-    fig, ani = make_animation(L, r_min, r_max, times, frames, args.slow, states)
+    fig, ani = make_animation(L, r_min, r_max, times, frames, slow, states)
     plt.tight_layout()
 
     out_dir = REPO_ROOT / 'data' / 'animations'
     out_dir.mkdir(parents=True, exist_ok=True)
 
     _base_interval_ms = 20
-    _interval_ms = max(1, int(_base_interval_ms * args.slow))
+    _interval_ms = max(1, int(_base_interval_ms * slow))
     _fps = max(1, int(1000 / _interval_ms))
 
-    outfile = out_dir / f'{args.sim}.mp4'
+    outfile = out_dir / f'{sim_name}.mp4'
     try:
         from matplotlib.animation import FFMpegWriter
         ani.save(outfile, writer=FFMpegWriter(fps=_fps))
     except Exception:
         from matplotlib.animation import PillowWriter
-        outfile = out_dir / f'{args.sim}.gif'
+        outfile = out_dir / f'{sim_name}.gif'
         ani.save(outfile, writer=PillowWriter(fps=_fps))
     print(f'Animación guardada en {outfile}')
 
-    plt.show()
+    plt.close(fig)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Renderiza animaciones de una o más simulaciones bajo data/simulations."
+    )
+    parser.add_argument(
+        "simulations",
+        nargs="+",
+        help="Nombres de carpetas bajo data/simulations (p.ej.: test10_600_1 test20_600_2)."
+    )
+    parser.add_argument(
+        "--slow",
+        type=float,
+        default=1.0,
+        help="Factor para ralentizar la animación (2.0 = 2x más lenta)."
+    )
+    args = parser.parse_args()
+
+    for sim_name in args.simulations:
+        render_one(sim_name, args.slow)
 
 
 if __name__ == '__main__':

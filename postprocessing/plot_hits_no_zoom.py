@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot cumulative central-particle hits vs time averaging over triplicate runs, con inset [0, 40] s."""
+"""Plot cumulative central-particle hits vs time averaging over triplicate runs (sin zoom/inset)."""
 
 from __future__ import annotations
 
@@ -10,14 +10,11 @@ from typing import Iterable, List, Tuple
 
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes, mark_inset
 
 THIS_FILE = Path(__file__).resolve()
 REPO_ROOT = THIS_FILE.parent.parent
 SIM_BASE = REPO_ROOT / "data" / "simulations"
 OUT_DIR = REPO_ROOT / "data" / "graphics"
-
-# ---- Marca vertical fija (sin pasar por parámetro) ----
 
 
 def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
@@ -107,9 +104,6 @@ def load_simulation(sim_dir: Path) -> Tuple[List[float], List[int], float, int]:
 
 
 def plot_hits(sim_names: List[str], t_mark: float = 20.0) -> None:
-    # almacenamos las series para re-usarlas en el inset
-    series = []  # (times: np.ndarray, hits: np.ndarray, color: str, label: str)
-
     fig, ax = plt.subplots(figsize=(12, 6))
 
     for sim_name in sim_names:
@@ -149,55 +143,15 @@ def plot_hits(sim_names: List[str], t_mark: float = 20.0) -> None:
         averaged_phi = sum(phis) / len(phis)
         label = f"N={population_sizes[0]} - φ={averaged_phi:.4f}"
 
-        # plot principal y guardamos color/serie para el inset
-        line, = ax.plot(reference_times, averaged_hits, label=label)
-        series.append(
-            (
-                np.asarray(reference_times, dtype=float),
-                np.asarray(averaged_hits, dtype=float),
-                line.get_color(),
-                label,
-            )
-        )
+        ax.plot(reference_times, averaged_hits, label=label)
 
-    # ----- Inset zoom del transitorio (t in [0, 50]) -----
-    axins = inset_axes(ax, width="30%", height="30%", loc="upper center", borderpad=0.8)
-
-    x0, x1 = 0.0, 50.0
-    ymins, ymaxs = [], []
-    for t, y, color, _ in series:
-        axins.plot(t, y, color=color, lw=1.0)
-        m = (t >= x0) & (t <= x1)
-        if np.any(m):
-            ymins.append(float(y[m].min()))
-            ymaxs.append(float(y[m].max()))
-
-    axins.set_xlim(x0, x1)
-    if ymins and ymaxs:
-        pad = 0.05 * (max(ymaxs) - min(ymins) if max(ymaxs) > min(ymins) else 1.0)
-        axins.set_ylim(min(ymins) - pad, max(ymaxs) + pad)
-
-    # ticks visibles (sin títulos) con tamaño 14 (dejé tu valor actual)
-    axins.set_xlabel("")
-    axins.set_ylabel("")
-    axins.tick_params(axis="both", which="both", labelsize=14, length=3)
-    axins.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
-
-    # líneas/rectángulo que indican la región del zoom (dos esquinas opuestas)
-    try:
-        ax.indicate_inset_zoom(axins, edgecolor="0.4")
-        mark_inset(ax, axins, loc1=2, loc2=4, fc="none", ec="0.4", lw=1.0)
-    except Exception:
-        pass
-        
-    # ----- Línea vertical punteada y etiqueta en t = t_mark -----
-    # (hacemos esto tras ajustar límites del inset para tener el ylim real del eje principal)
+    # Línea vertical punteada y etiqueta en t = t_mark
     ax.axvline(t_mark, linestyle="--", color="0.25", lw=1.2, dashes=(4, 3))
     y_top = ax.get_ylim()[1]
     ax.annotate(
         f"t = {t_mark:g} s",
         xy=(t_mark, y_top),
-        xytext=(0, -20),           # 6 px por encima del borde superior
+        xytext=(0, -20),
         textcoords="offset points",
         ha="center", va="bottom",
         fontsize=14,
@@ -205,31 +159,26 @@ def plot_hits(sim_names: List[str], t_mark: float = 20.0) -> None:
         clip_on=False,
     )
 
-    # Si T_MARK cae dentro de la ventana del inset, dibujamos la línea también allí
-    x0_in, x1_in = axins.get_xlim()
-    if x0_in <= t_mark <= x1_in:
-        axins.axvline(t_mark, linestyle="--", color="0.25", lw=1.0, dashes=(4, 3))
-
-    # ----- Etiquetas y guardado (en el eje principal) -----
+    # Etiquetas y guardado
     ax.set_xlabel("Tiempo (s)", fontsize=14)
     ax.set_ylabel("$N_c(t)$", fontsize=14)
     ax.tick_params(axis='both', labelsize=14)
-    #ax.legend(fontsize=14)  # leyenda como antes
     leg = ax.legend(
-        loc="upper right",            # arriba a la derecha
-        bbox_to_anchor=(0.98, 0.98),  # un pelín hacia adentro del borde
-        bbox_transform=ax.transAxes,  # fijo al eje (no a los datos)
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.02),  # centrada, un poquito por encima del eje
+        ncol=1,                      # opcional: reparte en 2 columnas si hay muchos ítems
         fontsize=14,
         frameon=True,
     )
     leg.get_frame().set_facecolor("white")
     leg.get_frame().set_alpha(0.9)
 
-    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
-    fig.tight_layout()
 
+    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.5)
+
+    fig.tight_layout()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / "central_hits_vs_time.png"
+    out_path = OUT_DIR / "central_hits_vs_time_noinset.png"
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
     print(f"Figura guardada en: {out_path}")
     plt.show()
@@ -237,7 +186,7 @@ def plot_hits(sim_names: List[str], t_mark: float = 20.0) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Plot cumulative central-particle hits versus time, averaging three replicates per simulation."
+        description="Plot cumulative central-particle hits versus time, averaging three replicates per simulation (sin inset)."
     )
     parser.add_argument(
         "simulations",

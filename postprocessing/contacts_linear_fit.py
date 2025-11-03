@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Ajuste lineal sobre curvas PROMEDIO de hits: (A) Error vs b y (B) rectas de ajuste (t>=t0)."""
-
 from __future__ import annotations
 import argparse
 import math
@@ -37,7 +34,6 @@ def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
         raise ValueError(
             f"static declares N={declared_N} but only {len(states)} particle states were provided in {static_path}"
         )
-    # Nota: si hay más estados que N, luego usaremos exactamente declared_N.
     return L, states, r_min, r_max, declared_N
 
 
@@ -100,15 +96,13 @@ def load_run(sim_dir: Path) -> Tuple[np.ndarray, np.ndarray, float, int]:
             f"static.txt declara N={declared_N} pero solo hay {states_N} estados en {sim_dir/'static.txt'}."
         )
 
-    # φ: mantené tu definición actual (solo r_min y N declarado)
     phi = packing_fraction(L, r_min, declared_N)
-
-    # Lectura de dinámico: EXACTAMENTE len(states) líneas por frame (incluida la central)
     t, h = read_hits(sim_dir, states_N)
 
     return np.asarray(t, dtype=float), np.asarray(h, dtype=float), phi, declared_N
 
-# ---------- Helpers de ajuste (inspirado en galaxy_linear_fit.py) ----------
+
+# ---------- Helpers de ajuste ----------
 def sse_given_b(t: np.ndarray, y: np.ndarray, b: float) -> Tuple[float, float]:
     """Devuelve SSE(b) y a*(b)=mean(y-bt)."""
     a_star = float(np.mean(y - b * t))
@@ -116,8 +110,13 @@ def sse_given_b(t: np.ndarray, y: np.ndarray, b: float) -> Tuple[float, float]:
     return float(resid @ resid), a_star
 
 
-def scan_b_and_minimize(t: np.ndarray, y: np.ndarray, ngrid: int = 801) -> Tuple[float, float, float, np.ndarray, np.ndarray]:
+def scan_b_and_minimize(
+    t: np.ndarray, y: np.ndarray, ngrid: int = 801
+) -> Tuple[float, float, float, np.ndarray, np.ndarray]:
     """Escanea b alrededor del OLS y devuelve b*, a*, SSE*, y las grillas (b_grid, sse_grid)."""
+    if t.size == 0:
+        raise ValueError("La ventana temporal está vacía (¿tmark demasiado grande?).")
+
     T = t - t.mean()
     Y = y - y.mean()
     denom = float(T @ T) if float(T @ T) != 0.0 else 1.0
@@ -125,7 +124,9 @@ def scan_b_and_minimize(t: np.ndarray, y: np.ndarray, ngrid: int = 801) -> Tuple
 
     duration = float(np.max(t) - np.min(t))
     y_range = float(np.max(y) - np.min(y))
-    span = max(10 * abs(b_ols), 0.1 * (y_range / duration if duration > 0 else 1.0), 1e-6)
+    # span mínimo para que no se corten curvas muy “estrechas”
+    MIN_SPAN = 1.0
+    span = max(10 * abs(b_ols), 0.1 * (y_range / duration if duration > 0 else 1.0), MIN_SPAN)
 
     b_grid = np.linspace(b_ols - span, b_ols + span, ngrid)
     sse_grid = np.empty_like(b_grid)
@@ -136,6 +137,7 @@ def scan_b_and_minimize(t: np.ndarray, y: np.ndarray, ngrid: int = 801) -> Tuple
 
     i_min = int(np.argmin(sse_grid))
     return float(b_grid[i_min]), float(a_grid[i_min]), float(sse_grid[i_min]), b_grid, sse_grid
+
 
 # ---------- Lógica principal ----------
 def average_hits_of_base(base_name: str) -> Tuple[np.ndarray, np.ndarray, float, int]:
@@ -171,23 +173,23 @@ def average_hits_of_base(base_name: str) -> Tuple[np.ndarray, np.ndarray, float,
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Error vs b y líneas de ajuste sobre CURVAS PROMEDIO de hits (t>=t0).")
+    ap = argparse.ArgumentParser(description="Error vs b y líneas de ajuste sobre CURVAS PROMEDIO de hits (t>=tmark).")
     ap.add_argument("simulations", nargs="+", help="Nombres base; se esperan réplicas '<name>_1', '_2', '_3' en data/simulations/")
-    ap.add_argument("--t0", type=float, default=20.0, help="Inicio de ventana temporal para la línea vertical y etiqueta (gráfico).")
-    ap.add_argument("--tmark", type=float, default=20.0, help="Inicio del estacionario para el ajuste (cálculo).")
+    ap.add_argument("--t0", type=float, default=20.0, help="Línea vertical informativa en el gráfico de (B).")
+    ap.add_argument("--tmark", type=float, default=20.0, help="Inicio del estacionario para el ajuste (A y B).")
     ap.add_argument("--out", type=Path, default=REPO_ROOT / "data" / "graphics" / "hits", help="Carpeta de salida de gráficos.")
     args = ap.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)
 
-    # Construir una lista de curvas promedio (una por base)
+    # Curvas promedio por base
     curves: List[Tuple[str, np.ndarray, np.ndarray, float, int]] = []  # (label, t, y, phi, N)
     for base in args.simulations:
         t, y, phi, N = average_hits_of_base(base)
         label = f"N={N} - φ={phi:.4f}"
         curves.append((label, t, y, phi, N))
 
-    # Paleta consistente por N (si hay varios base con mismo N, comparten color)
+    # Paleta consistente por N
     Ns_unique = sorted(set(N for _, _, _, _, N in curves))
     prop_colors = plt.rcParams['axes.prop_cycle'].by_key().get('color', [f"C{i}" for i in range(10)])
     color_of: Dict[int, str] = {N: prop_colors[i % len(prop_colors)] for i, N in enumerate(Ns_unique)}
@@ -196,10 +198,12 @@ def main():
     plt.figure(figsize=(9.2, 5.2))
     grids = []
     for label, t, y, _, N in curves:
-        # *** ÚNICO CAMBIO: usar tmark para el estacionario ***
         mask = t >= args.tmark
+        if not np.any(mask):
+            raise ValueError(f"[{label}] No hay datos con t >= {args.tmark}.")
         t_win = t[mask]
         y_win = y[mask]
+
         b_star, a_star, sse_star, b_grid, sse_grid = scan_b_and_minimize(t_win, y_win)
         color = color_of[N]
         plt.plot(b_grid, sse_grid, lw=2, color=color, label=label)
@@ -215,31 +219,36 @@ def main():
 
     fmt = ScalarFormatter(useMathText=True)
     fmt.set_scientific(True)
-    fmt.set_powerlimits((0, 0))   # obliga 10^{k} siempre
+    fmt.set_powerlimits((0, 0))
     ax.yaxis.set_major_formatter(fmt)
     ax.yaxis.get_offset_text().set_fontsize(14)
 
-    # Pequeño auto-zoom alrededor del mínimo global para ver bien las curvas
-    xs = np.concatenate([g[1] for g in grids])
-    ys = np.concatenate([g[2] for g in grids])
-    imin = int(np.nanargmin(ys))
-    b_star_global = float(xs[imin])
-    xr = ax.get_xlim()
-    dx = max(0.1 * (xr[1] - xr[0]), 0.1)
-    ax.set_xlim(b_star_global - dx, b_star_global + dx)
-    # Y-lims enfocados
-    xlo, xhi = ax.get_xlim()
+    # --- X: mostrar SIEMPRE todos los mínimos (claves en el caso L=12) ---
+    bmins = np.array([b_star for _, _, _, b_star, _ in grids])
+    xlo = float(bmins.min())
+    xhi = float(bmins.max())
+    span_x = xhi - xlo
+    if span_x <= 0:
+        # todos muy pegados: abrimos un ancho mínimo simétrico
+        span_x = 2.0
+        xlo = xlo - span_x/2
+        xhi = xhi + span_x/2
+    pad = 0.30 * span_x  # margen 30% para que entren bien las curvas alrededor del mínimo
+    ax.set_xlim(xlo - pad, xhi + pad)
+
+    # --- Y: zoom cerca del valle dentro del rango visible de X (percentil 5) ---
+    x0, x1 = ax.get_xlim()
     ys_win = []
     for _, b_grid, sse_grid, _, _ in grids:
-        m = (b_grid >= xlo) & (b_grid <= xhi)
+        m = (b_grid >= x0) & (b_grid <= x1)
         if np.any(m):
             ys_win.append(sse_grid[m])
     if ys_win:
-        ys_win = np.concatenate(ys_win)
-        y_min = float(np.nanmin(ys_win))
-        y_p95 = float(np.nanpercentile(ys_win, 5))
-        span = max(y_p95 - y_min, 1e-9)
-        ax.set_ylim(y_min - 0.15 * span, y_p95 + 0.1 * span)
+        ys_all = np.concatenate(ys_win)
+        y_min = float(np.nanmin(ys_all))
+        y_p05 = float(np.nanpercentile(ys_all, 5))
+        span_y = max(y_p05 - y_min, 1e-9)
+        ax.set_ylim(y_min - 0.15 * span_y, y_p05 + 0.10 * span_y)
 
     plt.tight_layout()
     f1 = args.out / "error_vs_q.png"
@@ -254,20 +263,19 @@ def main():
     plt.axvline(args.tmark, linestyle="--", color="0.4", lw=1)
 
     for label, t, y, _, N in curves:
-        # *** ÚNICO CAMBIO: usar tmark para el estacionario ***
         mask = t >= args.tmark
+        if not np.any(mask):
+            raise ValueError(f"[{label}] No hay datos con t >= {args.tmark}.")
         t_win = t[mask]
         y_win = y[mask]
         b_star, a_star, sse_star, _, _ = scan_b_and_minimize(t_win, y_win)
         color = color_of[N]
-        # curva original (suave)
         plt.plot(t, y, lw=1.2, alpha=0.30, color=color)
-        # recta ajustada en la ventana (definida por tmark)
         y_fit = a_star + b_star * t_win
         plt.plot(t_win, y_fit, lw=2.5, color=color, label=f"{label}")
 
     plt.xlabel("Tiempo (s)", fontsize=14)
-    plt.ylabel("Contactos Únicos", fontsize=14)
+    plt.ylabel("$N_c(t)$", fontsize=14)
     plt.tick_params(axis='both', labelsize=14)
     plt.legend(ncol=1, frameon=True, fontsize=14)
 

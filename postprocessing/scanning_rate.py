@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Q vs φ a partir de CURVAS PROMEDIO DE HITS por base: todas las marcas con el mismo color y barras de error.
-
-Uso:
-    python3 postprocessing/q_vs_phi.py test10_600 test20_600 test30_600 ... [--tmark 20] [--out data/graphics/hits]
-Cada nombre base espera tres réplicas: <base>_1, <base>_2, <base>_3 bajo data/simulations/.
-"""
-
 from __future__ import annotations
 import argparse
 import math
