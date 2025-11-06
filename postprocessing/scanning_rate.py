@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 import argparse
 import math
@@ -9,20 +7,18 @@ from typing import List, Tuple
 import numpy as np
 import matplotlib.pyplot as plt
 
-# --- Rutas base ---
 THIS_FILE = Path(__file__).resolve()
 REPO_ROOT = THIS_FILE.parent.parent
 SIM_BASE = REPO_ROOT / "data" / "simulations"
 
-# ---------- Lectura de estático ----------
 def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
     static_path = sim_dir / "static.txt"
     if not static_path.exists():
-        raise FileNotFoundError(f"static.txt not found for simulation '{sim_dir.name}'")
+        raise FileNotFoundError(f"No se encontró static.txt para la simulación '{sim_dir.name}'")
 
     lines = [line.strip() for line in static_path.read_text().splitlines() if line.strip()]
     if len(lines) < 4:
-        raise ValueError(f"static.txt at {static_path} should have at least 4 lines, got {len(lines)}")
+        raise ValueError(f"static.txt en {static_path} debería tener al menos 4 líneas; se obtuvieron {len(lines)}")
 
     L = float(lines[0])
     declared_N = int(lines[1])
@@ -30,31 +26,24 @@ def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
     r_max = float(lines[3])
     states = [line.upper() for line in lines[4:]]
     if len(states) == 0:
-        raise ValueError(f"No particle states listed in {static_path}")
+        raise ValueError(f"No se listaron estados de partículas en {static_path}")
     if len(states) < declared_N:
         raise ValueError(
-            f"static declares N={declared_N} but only {len(states)} particle states were provided in {static_path}"
+            f"static declara N={declared_N} pero solo se proporcionaron {len(states)} estados de partícula en {static_path}"
         )
-    # Si hay más estados que N, ignoraremos los extra solo para chequeo; para lectura usamos len(states).
     return L, states, r_min, r_max, declared_N
 
 
-# ---------- ϕ física: solo partículas móviles (excluye la fija) ----------
 def packing_fraction_excluding_central(L: float, r_min: float, states_count: int) -> float:
-    """
-    ϕ = ((states_count - 1) * π r_min^2) / L^2
-    Excluye una partícula (la central/fija) y usa radio impenetrable r_min para las móviles.
-    """
     mobile_n = max(states_count - 1, 0)
     area = mobile_n * math.pi * (r_min * r_min)
     return area / (L * L)
 
 
-# ---------- Lectura de dinámico (exactamente len(states) por frame) ----------
 def read_hits(sim_dir: Path, particle_count: int) -> Tuple[np.ndarray, np.ndarray]:
     dynamic_path = sim_dir / "dynamic.txt"
     if not dynamic_path.exists():
-        raise FileNotFoundError(f"dynamic.txt not found for simulation '{sim_dir.name}'")
+        raise FileNotFoundError(f"No se encontró dynamic.txt para la simulación '{sim_dir.name}'")
 
     times: List[float] = []
     hits: List[int] = []
@@ -76,55 +65,44 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[np.ndarray, np.ndarra
             times.append(time_value)
             hits.append(hit_value)
 
-            # Leer EXACTAMENTE 'particle_count' líneas de partículas
             for _ in range(particle_count):
                 data_line = f.readline()
                 if not data_line:
                     raise ValueError(
-                        f"Unexpected end of file in {dynamic_path} while reading particle data (time={time_value})"
+                        f"Fin de archivo inesperado en {dynamic_path} al leer datos de partículas (tiempo={time_value})"
                     )
                 if len(data_line.strip().split()) < 5:
                     raise ValueError(
-                        f"Expected particle data with 5 columns at time {time_value}, got: '{data_line.strip()}'"
+                        f"Se esperaban datos de partículas con 5 columnas en el tiempo {time_value}; se obtuvo: '{data_line.strip()}'"
                     )
 
     if not times:
-        raise ValueError(f"No frames found in {dynamic_path}")
+        raise ValueError(f"No se encontraron cuadros en {dynamic_path}")
     return np.asarray(times, float), np.asarray(hits, float)
 
 
 def load_run(sim_dir: Path) -> Tuple[np.ndarray, np.ndarray, float]:
-    """
-    t, h, φ para una sola ejecución (una réplica).
-    - Lectura como plot_hits: consume EXACTAMENTE len(states) por frame (incluye la fija).
-    - φ excluye la central y usa r_min para móviles.
-    """
     L, states, r_min, r_max, declared_N = read_static(sim_dir)
 
-    states_N = len(states)               # cantidad REAL de líneas F/M
+    states_N = len(states)
     if states_N < declared_N:
         raise ValueError(
             f"static.txt declara N={declared_N} pero solo hay {states_N} estados en {sim_dir/'static.txt'}."
         )
-    # φ sin la central:
     phi = packing_fraction_excluding_central(L, r_min, states_N)
 
-    # Lectura dinámica: EXACTAMENTE len(states) líneas por frame (para no desfasar)
     t, h = read_hits(sim_dir, states_N)
 
     return t, h, phi
 
 
-# ---------- Ajuste lineal y barrido en b ----------
 def sse_given_b(t: np.ndarray, y: np.ndarray, b: float) -> Tuple[float, float]:
-    """Devuelve SSE(b) y a*(b)=mean(y-bt)."""
     a_star = float(np.mean(y - b * t))
     resid = y - (a_star + b * t)
     return float(resid @ resid), a_star
 
 
 def scan_b_and_minimize(t: np.ndarray, y: np.ndarray, ngrid: int = 801) -> Tuple[float, float, float]:
-    """Devuelve b*, a*, SSE* escaneando alrededor de OLS."""
     T = t - t.mean()
     Y = y - y.mean()
     denom = float(T @ T) if float(T @ T) != 0.0 else 1.0
@@ -144,10 +122,7 @@ def scan_b_and_minimize(t: np.ndarray, y: np.ndarray, ngrid: int = 801) -> Tuple
     return float(b_grid[i_min]), float(a_grid[i_min]), float(sse_grid[i_min])
 
 
-# ---------- Q (pendiente) por base con replicación ----------
 def q_phi_for_base(base_name: str, tmark: float) -> Tuple[float, float, float, float]:
-    """Para una base: computa Q=b* por réplica (t>=tmark), devuelve
-       (phi_mean, phi_std, Q_mean, Q_std). Espera réplicas base_1..base_3."""
     replicas = [f"{base_name}_{i}" for i in range(1, 4)]
     phis: List[float] = []
     qs: List[float] = []
@@ -204,7 +179,6 @@ def main():
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
 
-    # Recolectar puntos (phi_mean, phi_std, Q_mean, Q_std) por base
     x_phi_mean, x_phi_err, y_q_mean, y_q_err = [], [], [], []
     for base in args.simulations:
         phi_mean, phi_std, q_mean, q_std = q_phi_for_base(base, args.tmark)
@@ -218,7 +192,6 @@ def main():
     y_q_mean   = np.asarray(y_q_mean)
     y_q_err    = np.asarray(y_q_err)
 
-    # --- Plot Q vs φ (mismo color para todos) ---
     plt.figure(figsize=(7.6, 5.2))
     plt.errorbar(
         x_phi_mean, y_q_mean,

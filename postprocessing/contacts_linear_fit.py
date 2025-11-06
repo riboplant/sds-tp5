@@ -8,20 +8,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter
 
-# --- Rutas base (idéntico a plot_hits.py) ---
 THIS_FILE = Path(__file__).resolve()
 REPO_ROOT = THIS_FILE.parent.parent
 SIM_BASE = REPO_ROOT / "data" / "simulations"
 
-# ---------- Lectura idéntica a plot_hits.py ----------
 def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
     static_path = sim_dir / "static.txt"
     if not static_path.exists():
-        raise FileNotFoundError(f"static.txt not found for simulation '{sim_dir.name}'")
+        raise FileNotFoundError(f"No se encontró static.txt para la simulación '{sim_dir.name}'")
 
     lines = [line.strip() for line in static_path.read_text().splitlines() if line.strip()]
     if len(lines) < 4:
-        raise ValueError(f"static.txt at {static_path} should have at least 4 lines, got {len(lines)}")
+        raise ValueError(f"static.txt en {static_path} debería tener al menos 4 líneas; se obtuvieron {len(lines)}")
 
     L = float(lines[0])
     declared_N = int(lines[1])
@@ -29,15 +27,14 @@ def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
     r_max = float(lines[3])
     states = [line.upper() for line in lines[4:]]
     if len(states) == 0:
-        raise ValueError(f"No particle states listed in {static_path}")
+        raise ValueError(f"No se listaron estados de partículas en {static_path}")
     if len(states) < declared_N:
         raise ValueError(
-            f"static declares N={declared_N} but only {len(states)} particle states were provided in {static_path}"
+            f"static declara N={declared_N} pero solo se proporcionaron {len(states)} estados de partícula en {static_path}"
         )
     return L, states, r_min, r_max, declared_N
 
 
-# ---------- ϕ física SOLO con radios impenetrables ----------
 def packing_fraction(L: float, r_min: float, declared_N: int) -> float:
     """ϕ = (N * π r_min^2) / L^2 usando exactamente N discos impenetrables."""
     area = declared_N * math.pi * (r_min * r_min)
@@ -47,7 +44,7 @@ def packing_fraction(L: float, r_min: float, declared_N: int) -> float:
 def read_hits(sim_dir: Path, particle_count: int) -> Tuple[List[float], List[int]]:
     dynamic_path = sim_dir / "dynamic.txt"
     if not dynamic_path.exists():
-        raise FileNotFoundError(f"dynamic.txt not found for simulation '{sim_dir.name}'")
+        raise FileNotFoundError(f"No se encontró dynamic.txt para la simulación '{sim_dir.name}'")
 
     times: List[float] = []
     hits: List[int] = []
@@ -69,27 +66,25 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[List[float], List[int
             times.append(time_value)
             hits.append(hit_value)
 
-            # Leer EXACTAMENTE N líneas de partículas y validar columnas
             for _ in range(particle_count):
                 data_line = f.readline()
                 if not data_line:
                     raise ValueError(
-                        f"Unexpected end of file in {dynamic_path} while reading particle data (time={time_value})"
+                        f"Fin de archivo inesperado en {dynamic_path} al leer datos de partículas (tiempo={time_value})"
                     )
                 if len(data_line.strip().split()) < 5:
                     raise ValueError(
-                        f"Expected particle data with 5 columns at time {time_value}, got: '{data_line.strip()}'"
+                        f"Se esperaban datos de partículas con 5 columnas en el tiempo {time_value}; se obtuvo: '{data_line.strip()}'"
                     )
 
     if not times:
-        raise ValueError(f"No frames found in {dynamic_path}")
+        raise ValueError(f"No se encontraron cuadros en {dynamic_path}")
     return times, hits
 
 
 def load_run(sim_dir: Path) -> Tuple[np.ndarray, np.ndarray, float, int]:
     L, states, r_min, r_max, declared_N = read_static(sim_dir)
 
-    # Usar la cantidad REAL de líneas F/M para leer el dynamic.txt
     states_N = len(states)
     if states_N < declared_N:
         raise ValueError(
@@ -101,8 +96,6 @@ def load_run(sim_dir: Path) -> Tuple[np.ndarray, np.ndarray, float, int]:
 
     return np.asarray(t, dtype=float), np.asarray(h, dtype=float), phi, declared_N
 
-
-# ---------- Helpers de ajuste ----------
 def sse_given_b(t: np.ndarray, y: np.ndarray, b: float) -> Tuple[float, float]:
     """Devuelve SSE(b) y a*(b)=mean(y-bt)."""
     a_star = float(np.mean(y - b * t))
@@ -124,7 +117,6 @@ def scan_b_and_minimize(
 
     duration = float(np.max(t) - np.min(t))
     y_range = float(np.max(y) - np.min(y))
-    # span mínimo para que no se corten curvas muy “estrechas”
     MIN_SPAN = 1.0
     span = max(10 * abs(b_ols), 0.1 * (y_range / duration if duration > 0 else 1.0), MIN_SPAN)
 
@@ -139,7 +131,6 @@ def scan_b_and_minimize(
     return float(b_grid[i_min]), float(a_grid[i_min]), float(sse_grid[i_min]), b_grid, sse_grid
 
 
-# ---------- Lógica principal ----------
 def average_hits_of_base(base_name: str) -> Tuple[np.ndarray, np.ndarray, float, int]:
     """Promedia las 3 réplicas <base>_1.._3 y retorna (t_ref, hits_prom, phi_prom, N)."""
     replicas = [f"{base_name}_{i}" for i in range(1, 4)]
@@ -158,7 +149,6 @@ def average_hits_of_base(base_name: str) -> Tuple[np.ndarray, np.ndarray, float,
         phis.append(phi)
         Ns.append(N)
 
-    # Validar timestamps idénticos
     tref = times_list[0]
     for tr, rep in zip(times_list[1:], replicas[1:]):
         if len(tr) != len(tref) or not np.allclose(tr, tref, rtol=1e-9, atol=1e-9):
@@ -167,7 +157,7 @@ def average_hits_of_base(base_name: str) -> Tuple[np.ndarray, np.ndarray, float,
     if len(set(Ns)) != 1:
         raise ValueError(f"Se esperaban Ns idénticos en las réplicas de '{base_name}', obtuve {Ns}.")
 
-    H = np.vstack(hits_list)  # (R, T)
+    H = np.vstack(hits_list)
     h_mean = H.mean(axis=0)
     return tref, h_mean, float(np.mean(phis)), int(Ns[0])
 
@@ -182,19 +172,16 @@ def main():
 
     args.out.mkdir(parents=True, exist_ok=True)
 
-    # Curvas promedio por base
     curves: List[Tuple[str, np.ndarray, np.ndarray, float, int]] = []  # (label, t, y, phi, N)
     for base in args.simulations:
         t, y, phi, N = average_hits_of_base(base)
         label = f"N={N} - φ={phi:.4f}"
         curves.append((label, t, y, phi, N))
 
-    # Paleta consistente por N
     Ns_unique = sorted(set(N for _, _, _, _, N in curves))
     prop_colors = plt.rcParams['axes.prop_cycle'].by_key().get('color', [f"C{i}" for i in range(10)])
     color_of: Dict[int, str] = {N: prop_colors[i % len(prop_colors)] for i, N in enumerate(Ns_unique)}
 
-    # ---------- (A) Error vs b por curva promedio ----------
     plt.figure(figsize=(9.2, 5.2))
     grids = []
     for label, t, y, _, N in curves:
@@ -223,20 +210,17 @@ def main():
     ax.yaxis.set_major_formatter(fmt)
     ax.yaxis.get_offset_text().set_fontsize(14)
 
-    # --- X: mostrar SIEMPRE todos los mínimos (claves en el caso L=12) ---
     bmins = np.array([b_star for _, _, _, b_star, _ in grids])
     xlo = float(bmins.min())
     xhi = float(bmins.max())
     span_x = xhi - xlo
     if span_x <= 0:
-        # todos muy pegados: abrimos un ancho mínimo simétrico
         span_x = 2.0
         xlo = xlo - span_x/2
         xhi = xhi + span_x/2
-    pad = 0.30 * span_x  # margen 30% para que entren bien las curvas alrededor del mínimo
+    pad = 0.30 * span_x
     ax.set_xlim(xlo - pad, xhi + pad)
 
-    # --- Y: zoom cerca del valle dentro del rango visible de X (percentil 5) ---
     x0, x1 = ax.get_xlim()
     ys_win = []
     for _, b_grid, sse_grid, _, _ in grids:
@@ -257,7 +241,6 @@ def main():
     plt.close()
     print(f"[OK] Gráfico guardado: {f1}")
 
-    # ---------- (B) Rectas de ajuste sobre cada curva promedio ----------
     plt.figure(figsize=(9.2, 5.2))
     ax = plt.gca()
     plt.axvline(args.tmark, linestyle="--", color="0.4", lw=1)

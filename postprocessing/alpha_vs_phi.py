@@ -1,29 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-alpha_vs_phi.py — v6 (formato estricto + acumulado, τ>0 y ajuste powerlaw)
-
-- Recibe 1+ prefijos de grupo: para cada PREFIJO asume carpetas PREFIJO_1, _2, _3
-  dentro de data/simulations/.
-- static.txt:
-    línea 1: L
-    línea 2: N (partículas en movimiento)
-    línea 3: r_min (AACPM)
-    línea 4: r_max (AACPM)
-    líneas 5..(N+5-1): etiquetas 'F'/'M' (N+1 en total; la central es extra)
-- dynamic.txt (por bloques):
-    cabecera: "t  k_acum"  (k_acum = contactos acumulados hasta t)
-    luego N+1 líneas: "x y vx vy r touched"  (se saltean)
-  Contacto único: si k_acum(t) > k_acum(prev), registrar **una** vez ese t.
-- t0 = 20
-- τ = diferencias entre tiempos ordenados; se filtran τ ≤ 0 (para ajuste continuo).
-- Intercalado round-robin de los τ de las 3 simulaciones del grupo.
-- φ = (N * π * r_min^2) / L^2   (por defecto **NO** cuenta a la central).
-- Ajuste power-law usando powerlaw.Fit (continuous): estima xmin y α por KS/MLE.
-- Incertidumbre σ_α y p-valor de KS provistos por powerlaw.
-- Salida: data/simulations/alpha_vs_phi_<TIMESTAMP>.png
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -36,7 +10,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import powerlaw
 
-# --- Fuente global 14pt ---
 plt.rcParams.update({
     "font.size": 14,
     "axes.titlesize": 14,
@@ -47,17 +20,11 @@ plt.rcParams.update({
     "figure.titlesize": 14,
 })
 
-# ---- Config ----
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SIM_BASE = REPO_ROOT / "data" / "simulations"
-GRAPH_BASE = REPO_ROOT / "data" / "graphs"
+GRAPH_BASE = REPO_ROOT / "data" / "graphics"
 T0 = 20.0
-
-# φ: incluir a la partícula central? (el enunciado usualmente usa N en movimiento)
 INCLUDE_CENTRAL_IN_PHI = False
-
-
-# ========= Lectura (formato estricto) =========
 
 @dataclass
 class StaticInfo:
@@ -65,8 +32,7 @@ class StaticInfo:
     N_moving: int
     r_min: float
     r_max: float
-    tags: List[str]  # 'F'/'M', largo N+1
-
+    tags: List[str]
 
 def read_static_strict(sim_dir: Path) -> StaticInfo:
     path = sim_dir / "static.txt"
@@ -79,7 +45,7 @@ def read_static_strict(sim_dir: Path) -> StaticInfo:
 
     try:
         L = float(lines[0])
-        N = int(float(lines[1]))     # por si viene '600.0'
+        N = int(float(lines[1]))
         r_min = float(lines[2])
         r_max = float(lines[3])
     except Exception as e:
@@ -99,12 +65,6 @@ def phi_from_static(si: StaticInfo) -> float:
 
 
 def read_contact_times_from_dynamic(sim_dir: Path, tags: List[str], t0: float = T0) -> np.ndarray:
-    """
-    dynamic.txt por bloques:
-      cabecera: t  k_acum
-      luego len(tags) líneas: x y vx vy r touched (se saltean)
-    Contacto único: si k_acum sube respecto del bloque anterior, registrar UNA vez t.
-    """
     path = sim_dir / "dynamic.txt"
     if not path.exists():
         raise FileNotFoundError(f"Falta {path}")
@@ -132,9 +92,8 @@ def read_contact_times_from_dynamic(sim_dir: Path, tags: List[str], t0: float = 
             t = float(parts[0])
             k_acum = int(float(parts[1]))
         except Exception:
-            raise ValueError(f"{path}: no pude parsear 't k_acum' en '{header}'")
+            raise ValueError(f"{path}: no se pudo parsear 't k_acum' en '{header}'")
 
-        # saltar N+1 líneas de estado
         for _ in range(n_lines_block):
             try:
                 next(it)
@@ -150,7 +109,6 @@ def read_contact_times_from_dynamic(sim_dir: Path, tags: List[str], t0: float = 
 
 
 def taus_from_times(times: np.ndarray) -> np.ndarray:
-    """τ_i = t_{i+1} - t_i, filtrando τ ≤ 0."""
     if times.size < 2:
         return np.array([], dtype=float)
     taus = np.diff(times)
@@ -158,7 +116,6 @@ def taus_from_times(times: np.ndarray) -> np.ndarray:
 
 
 def interleave_round_robin(arrs: Sequence[np.ndarray]) -> np.ndarray:
-    """[a0,a1,...],[b0,...],[c0,...] -> [a0,b0,c1,a1,b1,c1,...] (ignora vacíos)."""
     max_len = max((len(a) for a in arrs), default=0)
     out: List[float] = []
     for i in range(max_len):
@@ -209,9 +166,6 @@ def fit_powerlaw_distribution(data: np.ndarray) -> tuple[float, float, float, fl
     n_tail = int(np.sum(x >= xmin)) if np.isfinite(xmin) else 0
     return alpha, sigma_alpha, xmin, ks, p_value, n_tail
 
-
-# ========= Pipeline por grupo =========
-
 @dataclass
 class GroupResult:
     prefix: str
@@ -258,9 +212,6 @@ def process_group(prefix: str, t0: float) -> GroupResult:
         taus=tau_interleaved,
     )
 
-
-# ========= Main / Plot =========
-
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=f"α vs ϕ (t0 configurable, default {T0}) con acumulado y ajuste powerlaw.")
     ap.add_argument("--t0", type=float, default=T0, help="Tiempo mínimo para registrar contactos.")
@@ -286,7 +237,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     results.sort(key=lambda r: r.phi)
 
-    # ---- Figura α vs φ ----
     fig, ax = plt.subplots(figsize=(6.4, 4.2), constrained_layout=True)
     x = [r.phi for r in results]
     y = [r.alpha for r in results]
@@ -297,7 +247,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ax.tick_params(axis="both", labelsize=14)
     ax.grid(True, alpha=0.3)
 
-    # ---- Figura CCDF log–log ----
     fig_log, ax_log = plt.subplots(figsize=(6.4, 4.2), constrained_layout=True)
     plotted_any = False
     for r in results:
@@ -332,7 +281,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         plt.close(fig_log)
 
-    # ---- Figura p-valor vs φ ----
     finite_results = [r for r in results if np.isfinite(r.p_value)]
     if finite_results:
         fig_p, ax_p = plt.subplots(figsize=(6.4, 4.2), constrained_layout=True)
@@ -345,7 +293,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ax_p.tick_params(axis="both", labelsize=14)
         ax_p.grid(True, alpha=0.3)
 
-    # ---- Guardado ----
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = GRAPH_BASE / f"alpha_vs_phi_{ts}.png"
     out_path.parent.mkdir(parents=True, exist_ok=True)

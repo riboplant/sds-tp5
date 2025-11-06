@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Plot cumulative central-particle hits vs time averaging over triplicate runs (sin zoom/inset)."""
-
 from __future__ import annotations
 
 import argparse
@@ -20,11 +17,11 @@ OUT_DIR = REPO_ROOT / "data" / "graphics"
 def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
     static_path = sim_dir / "static.txt"
     if not static_path.exists():
-        raise FileNotFoundError(f"static.txt not found for simulation '{sim_dir.name}'")
+        raise FileNotFoundError(f"No se encontró static.txt para la simulación '{sim_dir.name}'")
 
     lines = [line.strip() for line in static_path.read_text().splitlines() if line.strip()]
     if len(lines) < 4:
-        raise ValueError(f"static.txt at {static_path} should have at least 4 lines, got {len(lines)}")
+        raise ValueError(f"static.txt en {static_path} debería tener al menos 4 líneas; se obtuvieron {len(lines)}")
 
     L = float(lines[0])
     declared_N = int(lines[1])
@@ -32,10 +29,10 @@ def read_static(sim_dir: Path) -> Tuple[float, List[str], float, float, int]:
     r_max = float(lines[3])
     states = [line.upper() for line in lines[4:]]
     if len(states) == 0:
-        raise ValueError(f"No particle states listed in {static_path}")
+        raise ValueError(f"No se listaron estados de partículas en {static_path}")
     if len(states) < declared_N:
         raise ValueError(
-            f"static declares N={declared_N} but only {len(states)} particle states were provided in {static_path}"
+            f"static declara N={declared_N} pero solo se proporcionaron {len(states)} estados de partícula en {static_path}"
         )
     return L, states, r_min, r_max, declared_N
 
@@ -44,7 +41,6 @@ def packing_fraction(L: float, states: Iterable[str], r_min: float, declared_N: 
                      central_is_obstacle: bool = False, central_radius: float | None = None) -> float:
     """ϕ física: suma de discos impenetrables sobre el área del dominio."""
     area = 0.0
-    # Usa exactamente N estados (por si el archivo trae líneas extra).
     for i, _ in enumerate(states[:declared_N]):
         if central_is_obstacle and i == 0:
             r = central_radius if central_radius is not None else r_min
@@ -57,7 +53,7 @@ def packing_fraction(L: float, states: Iterable[str], r_min: float, declared_N: 
 def read_hits(sim_dir: Path, particle_count: int) -> Tuple[List[float], List[int]]:
     dynamic_path = sim_dir / "dynamic.txt"
     if not dynamic_path.exists():
-        raise FileNotFoundError(f"dynamic.txt not found for simulation '{sim_dir.name}'")
+        raise FileNotFoundError(f"No se encontró dynamic.txt para la simulación '{sim_dir.name}'")
 
     times: List[float] = []
     hits: List[int] = []
@@ -83,15 +79,15 @@ def read_hits(sim_dir: Path, particle_count: int) -> Tuple[List[float], List[int
                 data_line = f.readline()
                 if not data_line:
                     raise ValueError(
-                        f"Unexpected end of file in {dynamic_path} while reading particle data (time={time_value})"
+                        f"Fin de archivo inesperado en {dynamic_path} al leer datos de partículas (tiempo={time_value})"
                     )
                 if len(data_line.strip().split()) < 5:
                     raise ValueError(
-                        f"Expected particle data with 5 columns at time {time_value}, got: '{data_line.strip()}'"
+                        f"Se esperaban datos de partículas con 5 columnas en el tiempo {time_value}; se obtuvo: '{data_line.strip()}'"
                     )
 
     if not times:
-        raise ValueError(f"No frames found in {dynamic_path}")
+        raise ValueError(f"No se encontraron cuadros en {dynamic_path}")
     return times, hits
 
 
@@ -116,7 +112,7 @@ def plot_hits(sim_names: List[str], t_mark: float = 20.0) -> None:
         for replicate in replicate_names:
             sim_dir = SIM_BASE / replicate
             if not sim_dir.exists():
-                raise FileNotFoundError(f"Simulation directory not found: {sim_dir}")
+                raise FileNotFoundError(f"No se encontró el directorio de la simulación: {sim_dir}")
 
             times, hits, phi, declared_N = load_simulation(sim_dir)
             replicate_times.append(times)
@@ -131,21 +127,20 @@ def plot_hits(sim_names: List[str], t_mark: float = 20.0) -> None:
                 for t_ref, t_other in zip(reference_times, other_times)
             ):
                 raise ValueError(
-                    "All replicates must share identical timestamps. "
-                    f"Mismatch found between '{replicate_names[0]}' and '{replicate}'."
+                    "Todas las réplicas deben compartir timestamps idénticos. "
+                    f"Se detectó una discrepancia entre '{replicate_names[0]}' y '{replicate}'."
                 )
 
         averaged_hits = [sum(values) / len(values) for values in zip(*replicate_hits)]
         if len(set(population_sizes)) != 1:
             raise ValueError(
-                f"Expected identical particle counts across replicates for '{sim_name}', got {population_sizes}."
+                f"Se esperaban cantidades de partículas idénticas entre réplicas para '{sim_name}', pero se obtuvieron {population_sizes}."
             )
         averaged_phi = sum(phis) / len(phis)
         label = f"N={population_sizes[0]} - φ={averaged_phi:.4f}"
 
         ax.plot(reference_times, averaged_hits, label=label)
 
-    # Línea vertical punteada y etiqueta en t = t_mark
     ax.axvline(t_mark, linestyle="--", color="0.25", lw=1.2, dashes=(4, 3))
     y_top = ax.get_ylim()[1]
     ax.annotate(
@@ -159,14 +154,13 @@ def plot_hits(sim_names: List[str], t_mark: float = 20.0) -> None:
         clip_on=False,
     )
 
-    # Etiquetas y guardado
     ax.set_xlabel("Tiempo (s)", fontsize=14)
     ax.set_ylabel("$N_c(t)$", fontsize=14)
     ax.tick_params(axis='both', labelsize=14)
     leg = ax.legend(
         loc="upper center",
-        bbox_to_anchor=(0.5, 1.02),  # centrada, un poquito por encima del eje
-        ncol=1,                      # opcional: reparte en 2 columnas si hay muchos ítems
+        bbox_to_anchor=(0.5, 1.02),
+        ncol=1,
         fontsize=14,
         frameon=True,
     )

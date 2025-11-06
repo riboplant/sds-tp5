@@ -17,21 +17,21 @@ def read_static(static_path: Path):
     with static_path.open('r') as f:
         lines = [line.strip() for line in f if line.strip() != '']
     if len(lines) < 4:
-        raise ValueError(f"static.txt at {static_path} has {len(lines)} lines, expected at least 4.")
+        raise ValueError(f"static.txt en {static_path} tiene {len(lines)} líneas; se esperaban al menos 4.")
     L = float(lines[0])
     N = int(lines[1])
     r_min = float(lines[2])
     r_max = float(lines[3])
     raw_states = [line.upper() for line in lines[4:]]
     if not raw_states:
-        raise ValueError(f"static.txt at {static_path} does not list particle states after the first 4 lines.")
+        raise ValueError(f"static.txt en {static_path} no lista estados de partículas después de las primeras 4 líneas.")
     states = []
     for idx, state in enumerate(raw_states):
         if state not in ('M', 'F'):
-            raise ValueError(f"Unexpected state '{state}' for particle {idx + 1}. Expected 'M' or 'F'.")
+            raise ValueError(f"Estado inesperado '{state}' para la partícula {idx + 1}. Se esperaba 'M' o 'F'.")
         states.append(state)
     if len(states) < N:
-        raise ValueError(f"static.txt declares N={N} but provides only {len(states)} particle states.")
+        raise ValueError(f"static.txt declara N={N} pero solo proporciona {len(states)} estados de partícula.")
     return L, N, r_min, r_max, states
 
 
@@ -56,23 +56,23 @@ def read_dynamic(dynamic_path: Path, count: int):
                 if len(parts) > 1:
                     _total_hits = int(float(parts[1]))
             except ValueError as e:
-                raise ValueError(f"Expected a time value (and optional total contact count), got '{t_line}'") from e
+                raise ValueError(f"Se esperaba un valor de tiempo (y opcionalmente el conteo total de contactos); se obtuvo '{t_line}'") from e
 
             xs, ys, vxs, vys, rs, contacts = [], [], [], [], [], []
             for i in range(count):
                 data_line = f.readline()
                 if not data_line:
-                    raise ValueError(f"Unexpected EOF while reading particle {i+1}/{count} at time {t}")
+                    raise ValueError(f"EOF inesperado al leer la partícula {i+1}/{count} en el tiempo {t}")
                 parts = data_line.strip().split()
                 if len(parts) < 5:
-                    raise ValueError(f"Expected x y vx vy r on line: '{data_line.strip()}'")
+                    raise ValueError(f"Se esperaba x y vx vy r en la línea: '{data_line.strip()}'")
                 x, y, vx, vy, r = map(float, parts[:5])
                 contact_flag = 0
                 if len(parts) >= 6:
                     try:
                         contact_flag = 1 if int(float(parts[5])) != 0 else 0
                     except ValueError as exc:
-                        raise ValueError(f"Invalid contact flag '{parts[5]}' for particle {i+1} at time {t}") from exc
+                        raise ValueError(f"Indicador de contacto inválido '{parts[5]}' para la partícula {i+1} en el tiempo {t}") from exc
                 xs.append(x); ys.append(y); vxs.append(vx); vys.append(vy); rs.append(r)
                 contacts.append(contact_flag)
 
@@ -114,7 +114,6 @@ def make_animation(L, r_min, r_max, times, frames, slow_factor: float, states):
     for c in patches:
         ax.add_patch(c)
 
-    # Velocity arrow scale
     vel_scale = 0.30
     zeros = [0.0] * count
     quiv = ax.quiver(
@@ -176,10 +175,10 @@ def render_one(sim_name: str, slow: float) -> None:
     dynamic_path = sim_dir / 'dynamic.txt'
 
     if not static_path.exists():
-        print(f"ERROR: static file not found: {static_path}", file=sys.stderr)
+        print(f"ERROR: no se encontró static.txt: {static_path}", file=sys.stderr)
         return
     if not dynamic_path.exists():
-        print(f"ERROR: dynamic file not found: {dynamic_path}", file=sys.stderr)
+        print(f"ERROR: no se encontró dynamic.txt: {dynamic_path}", file=sys.stderr)
         return
 
     L, N, r_min, r_max, states = read_static(static_path)
@@ -187,7 +186,7 @@ def render_one(sim_name: str, slow: float) -> None:
     times, frames = read_dynamic(dynamic_path, total_particles)
 
     if len(frames) == 0:
-        print(f"[{sim_name}] No frames found in dynamic.txt. Nothing to animate.", file=sys.stderr)
+        print(f"[{sim_name}] No se encontraron cuadros en dynamic.txt. Nada para animar.", file=sys.stderr)
         return
 
     fig, ani = make_animation(L, r_min, r_max, times, frames, slow, states)

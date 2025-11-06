@@ -393,5 +393,5 @@ $RECYCLE.BIN/
 
 data
 .venv
-
-# End of https://www.toptal.com/developers/gitignore/api/jetbrains,java,python,windows,linux,macos
+.vscode
+__pycache__/
